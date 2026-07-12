@@ -143,13 +143,16 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.3;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
 container.appendChild(renderer.domElement);
 
 // Lights
-scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+scene.add(new THREE.AmbientLight(0xffffff, 0.7));
 
 // Key light — strong, low-angle, casts shadows to reveal surface relief
-const keyLight = new THREE.DirectionalLight(0xfff2dd, 3.0);
+const keyLight = new THREE.DirectionalLight(0xfff2dd, 4.0);
 keyLight.position.set(6, 4, 8);
 keyLight.castShadow = true;
 keyLight.shadow.mapSize.set(2048, 2048);
@@ -163,17 +166,17 @@ keyLight.shadow.bias = -0.0005;
 scene.add(keyLight);
 
 // Raking light from the side — brings out fine surface cracks/relief via shadow contrast
-const rakingLight1 = new THREE.DirectionalLight(0xfff4e0, 2.0);
+const rakingLight1 = new THREE.DirectionalLight(0xfff4e0, 2.6);
 rakingLight1.position.set(9, 0.5, 0);
 scene.add(rakingLight1);
-const rakingLight2 = new THREE.DirectionalLight(0xe0eaff, 1.4);
+const rakingLight2 = new THREE.DirectionalLight(0xe0eaff, 1.8);
 rakingLight2.position.set(-9, 0.5, 1);
 scene.add(rakingLight2);
-const topLight = new THREE.DirectionalLight(0xffffff, 1.2);
+const topLight = new THREE.DirectionalLight(0xffffff, 1.8);
 topLight.position.set(0, 9, 1);
 scene.add(topLight);
 
-const fillLight = new THREE.HemisphereLight(0xffffff, 0x4a4a4a, 0.6);
+const fillLight = new THREE.HemisphereLight(0xffffff, 0x666666, 0.8);
 scene.add(fillLight);
 
 // Grid for reference
@@ -255,9 +258,9 @@ function frameModel(object) {
 
 function defaultMaterial() {
   return new THREE.MeshStandardMaterial({
-    color: 0xd6c9a8,
+    color: 0xe8dcc0,
     metalness: 0.0,
-    roughness: 0.92,
+    roughness: 0.88,
     flatShading: false,
     side: THREE.DoubleSide
   });
@@ -279,28 +282,58 @@ function addMeshToScene(mesh) {
 }
 
 // Detects which side of a thin slab has more surface detail (the fossil face)
-// by comparing how much the normals on each side point toward +Z vs -Z,
-// and rotates the model so the detailed side faces the camera.
+// by measuring how "bumpy" each side's surface is (variance in vertex depth along
+// the thinnest axis of the model), then orienting the bumpier side toward the camera.
 function orientDetailSideForward(object) {
-  let posZNormals = 0;
-  let negZNormals = 0;
+  object.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(object);
+  const size = box.getSize(new THREE.Vector3());
+
+  // Find the thinnest axis — that's the slab's depth axis
+  const axes = ['x', 'y', 'z'];
+  const sizes = [size.x, size.y, size.z];
+  let thinAxisIndex = 0;
+  for (let i = 1; i < 3; i++) {
+    if (sizes[i] < sizes[thinAxisIndex]) thinAxisIndex = i;
+  }
+  const thinAxis = axes[thinAxisIndex];
+  const mid = box.min[thinAxis] + size[axes[thinAxisIndex]] / 2;
+
+  // For each half (front/back along the thin axis), measure how much the
+  // surface deviates from flat — the fossil-detail side will have much higher variance.
+  let frontSum = 0, frontSumSq = 0, frontCount = 0;
+  let backSum = 0, backSumSq = 0, backCount = 0;
 
   object.traverse((child) => {
-    if (child.isMesh && child.geometry && child.geometry.attributes.normal) {
-      const normals = child.geometry.attributes.normal;
-      const sampleStep = Math.max(1, Math.floor(normals.count / 5000));
-      for (let i = 0; i < normals.count; i += sampleStep) {
-        const nz = normals.getZ(i);
-        if (nz > 0.3) posZNormals++;
-        else if (nz < -0.3) negZNormals++;
+    if (child.isMesh && child.geometry && child.geometry.attributes.position) {
+      const pos = child.geometry.attributes.position;
+      const sampleStep = Math.max(1, Math.floor(pos.count / 8000));
+      const v = new THREE.Vector3();
+      for (let i = 0; i < pos.count; i += sampleStep) {
+        v.set(pos.getX(i), pos.getY(i), pos.getZ(i));
+        v.applyMatrix4(child.matrixWorld);
+        const val = v[thinAxis];
+        if (val >= mid) {
+          frontSum += val; frontSumSq += val * val; frontCount++;
+        } else {
+          backSum += val; backSumSq += val * val; backCount++;
+        }
       }
     }
   });
 
-  // If the back side (-Z) has meaningfully more relief-facing normals than +Z,
-  // the detail is currently facing away from camera — flip it forward.
-  if (negZNormals > posZNormals * 1.15) {
-    object.rotation.y += Math.PI;
+  if (frontCount < 10 || backCount < 10) return; // not enough data, leave as-is
+
+  const frontVariance = (frontSumSq / frontCount) - Math.pow(frontSum / frontCount, 2);
+  const backVariance = (backSumSq / backCount) - Math.pow(backSum / backCount, 2);
+
+  // The camera (after frameModel) looks roughly from +thinAxis toward the model.
+  // If the BACK half has more surface variance, the detailed side is facing away — flip it.
+  if (backVariance > frontVariance * 1.1) {
+    if (thinAxisIndex === 0) object.rotation.z += Math.PI;
+    else if (thinAxisIndex === 1) object.rotation.x += Math.PI;
+    else object.rotation.y += Math.PI;
+    object.updateMatrixWorld(true);
   }
 }
 
