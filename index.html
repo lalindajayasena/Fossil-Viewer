@@ -146,10 +146,10 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 container.appendChild(renderer.domElement);
 
 // Lights
-scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+scene.add(new THREE.AmbientLight(0xffffff, 0.5));
 
 // Key light — strong, low-angle, casts shadows to reveal surface relief
-const keyLight = new THREE.DirectionalLight(0xfff2dd, 2.2);
+const keyLight = new THREE.DirectionalLight(0xfff2dd, 3.0);
 keyLight.position.set(6, 4, 8);
 keyLight.castShadow = true;
 keyLight.shadow.mapSize.set(2048, 2048);
@@ -163,14 +163,17 @@ keyLight.shadow.bias = -0.0005;
 scene.add(keyLight);
 
 // Raking light from the side — brings out fine surface cracks/relief via shadow contrast
-const rakingLight1 = new THREE.DirectionalLight(0xfff4e0, 1.6);
+const rakingLight1 = new THREE.DirectionalLight(0xfff4e0, 2.0);
 rakingLight1.position.set(9, 0.5, 0);
 scene.add(rakingLight1);
-const rakingLight2 = new THREE.DirectionalLight(0xe0eaff, 1.1);
+const rakingLight2 = new THREE.DirectionalLight(0xe0eaff, 1.4);
 rakingLight2.position.set(-9, 0.5, 1);
 scene.add(rakingLight2);
+const topLight = new THREE.DirectionalLight(0xffffff, 1.2);
+topLight.position.set(0, 9, 1);
+scene.add(topLight);
 
-const fillLight = new THREE.HemisphereLight(0xffffff, 0x3a3a3a, 0.4);
+const fillLight = new THREE.HemisphereLight(0xffffff, 0x4a4a4a, 0.6);
 scene.add(fillLight);
 
 // Grid for reference
@@ -252,9 +255,9 @@ function frameModel(object) {
 
 function defaultMaterial() {
   return new THREE.MeshStandardMaterial({
-    color: 0xcbb894,
+    color: 0xd6c9a8,
     metalness: 0.0,
-    roughness: 0.85,
+    roughness: 0.92,
     flatShading: false,
     side: THREE.DoubleSide
   });
@@ -271,7 +274,34 @@ function addMeshToScene(mesh) {
   });
   scene.add(mesh);
   frameModel(mesh);
+  orientDetailSideForward(mesh);
   document.getElementById('flipControls').style.display = 'block';
+}
+
+// Detects which side of a thin slab has more surface detail (the fossil face)
+// by comparing how much the normals on each side point toward +Z vs -Z,
+// and rotates the model so the detailed side faces the camera.
+function orientDetailSideForward(object) {
+  let posZNormals = 0;
+  let negZNormals = 0;
+
+  object.traverse((child) => {
+    if (child.isMesh && child.geometry && child.geometry.attributes.normal) {
+      const normals = child.geometry.attributes.normal;
+      const sampleStep = Math.max(1, Math.floor(normals.count / 5000));
+      for (let i = 0; i < normals.count; i += sampleStep) {
+        const nz = normals.getZ(i);
+        if (nz > 0.3) posZNormals++;
+        else if (nz < -0.3) negZNormals++;
+      }
+    }
+  });
+
+  // If the back side (-Z) has meaningfully more relief-facing normals than +Z,
+  // the detail is currently facing away from camera — flip it forward.
+  if (negZNormals > posZNormals * 1.15) {
+    object.rotation.y += Math.PI;
+  }
 }
 
 const flipXBtn = document.getElementById('flipXBtn');
