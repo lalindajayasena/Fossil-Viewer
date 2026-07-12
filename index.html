@@ -170,20 +170,50 @@ function clearCurrentModel() {
 }
 
 function frameModel(object) {
-  const box = new THREE.Box3().setFromObject(object);
+  // Force world matrix update before measuring
+  object.updateMatrixWorld(true);
+
+  let box = new THREE.Box3().setFromObject(object);
+
+  if (box.isEmpty()) {
+    setStatus('Warning: model appears to have no visible geometry.');
+    return;
+  }
+
   const size = box.getSize(new THREE.Vector3());
   const center = box.getCenter(new THREE.Vector3());
 
-  object.position.sub(center);
+  // Re-center the object at the origin
+  object.position.x -= center.x;
+  object.position.y -= center.y;
+  object.position.z -= center.z;
 
-  const maxDim = Math.max(size.x, size.y, size.z) || 1;
-  const scale = 2.5 / maxDim;
+  const maxDim = Math.max(size.x, size.y, size.z, 0.0001);
+  const targetSize = 2.5;
+  const scale = targetSize / maxDim;
   object.scale.setScalar(scale);
 
-  const distance = 5;
-  camera.position.set(distance * 0.6, distance * 0.4, distance);
-  camera.lookAt(0, 0, 0);
-  controls.target.set(0, 0, 0);
+  // Recompute box after scaling/centering to get accurate framing
+  object.updateMatrixWorld(true);
+  box = new THREE.Box3().setFromObject(object);
+  const newSize = box.getSize(new THREE.Vector3());
+  const newCenter = box.getCenter(new THREE.Vector3());
+
+  const fitRadius = newSize.length() * 0.5 || 1;
+  const fov = camera.fov * (Math.PI / 180);
+  const distance = Math.max((fitRadius / Math.sin(fov / 2)) * 1.4, 1.5);
+
+  camera.near = distance / 100;
+  camera.far = distance * 100;
+  camera.updateProjectionMatrix();
+
+  camera.position.set(
+    newCenter.x + distance * 0.5,
+    newCenter.y + distance * 0.35,
+    newCenter.z + distance
+  );
+  camera.lookAt(newCenter);
+  controls.target.copy(newCenter);
   controls.update();
 }
 
@@ -192,7 +222,8 @@ function defaultMaterial() {
     color: 0xcaa45c,
     metalness: 0.1,
     roughness: 0.7,
-    flatShading: false
+    flatShading: false,
+    side: THREE.DoubleSide
   });
 }
 
@@ -260,16 +291,41 @@ function loadFile(file) {
       try {
         const loader = new PLYLoader();
         const geometry = loader.parse(e.target.result);
-        geometry.computeVertexNormals();
-        let material;
-        if (geometry.hasAttribute('color')) {
-          material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7 });
-        } else {
-          material = defaultMaterial();
+
+        const vertCount = geometry.hasAttribute('position') ? geometry.attributes.position.count : 0;
+        const hasIndex = geometry.index !== null;
+        const faceCount = hasIndex ? geometry.index.count / 3 : 0;
+
+        if (vertCount === 0) {
+          setStatus('PLY file has no readable vertex data.');
+          loadingEl.style.display = 'none';
+          return;
         }
-        const mesh = new THREE.Mesh(geometry, material);
-        addMeshToScene(mesh);
-        setStatus('Loaded: ' + file.name);
+
+        let object;
+        const colorAttr = geometry.getAttribute('color');
+        const hasRealColor = colorAttr && colorAttr.count === vertCount;
+
+        if (hasIndex && faceCount > 0) {
+          // Normal mesh with faces
+          if (!geometry.hasAttribute('normal')) {
+            geometry.computeVertexNormals();
+          }
+          const material = hasRealColor
+            ? new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7, side: THREE.DoubleSide })
+            : (() => { const m = defaultMaterial(); m.side = THREE.DoubleSide; return m; })();
+          object = new THREE.Mesh(geometry, material);
+          setStatus('Loaded: ' + file.name + ' (' + vertCount + ' verts, ' + Math.round(faceCount) + ' faces)');
+        } else {
+          // No faces present — render as a point cloud so it's still visible
+          const material = hasRealColor
+            ? new THREE.PointsMaterial({ vertexColors: true, size: 0.02 })
+            : new THREE.PointsMaterial({ color: 0xcaa45c, size: 0.02 });
+          object = new THREE.Points(geometry, material);
+          setStatus('Loaded: ' + file.name + ' as point cloud (' + vertCount + ' points, no face data found)');
+        }
+
+        addMeshToScene(object);
       } catch (err) {
         setStatus('Failed to parse PLY: ' + err.message);
       }
