@@ -134,31 +134,43 @@ const camera = new THREE.PerspectiveCamera(
 camera.position.set(0, 0, 5);
 
 // Light attached to camera so the model is always lit, no matter how it's rotated
-const cameraLight = new THREE.PointLight(0xffffff, 3.5, 0, 0.3);
+const cameraLight = new THREE.PointLight(0xffffff, 0.8, 0, 0.3);
 camera.add(cameraLight);
 scene.add(camera);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 container.appendChild(renderer.domElement);
 
 // Lights
-scene.add(new THREE.AmbientLight(0xffffff, 0.5));
-const dirLight1 = new THREE.DirectionalLight(0xffffff, 1.6);
-dirLight1.position.set(5, 10, 7);
-scene.add(dirLight1);
-const dirLight2 = new THREE.DirectionalLight(0xffffff, 0.6);
-dirLight2.position.set(-5, 3, -5);
-scene.add(dirLight2);
+scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+
+// Key light — strong, low-angle, casts shadows to reveal surface relief
+const keyLight = new THREE.DirectionalLight(0xfff2dd, 2.2);
+keyLight.position.set(6, 4, 8);
+keyLight.castShadow = true;
+keyLight.shadow.mapSize.set(2048, 2048);
+keyLight.shadow.camera.near = 0.1;
+keyLight.shadow.camera.far = 50;
+keyLight.shadow.camera.left = -5;
+keyLight.shadow.camera.right = 5;
+keyLight.shadow.camera.top = 5;
+keyLight.shadow.camera.bottom = -5;
+keyLight.shadow.bias = -0.0005;
+scene.add(keyLight);
+
 // Raking light from the side — brings out fine surface cracks/relief via shadow contrast
-const rakingLight1 = new THREE.DirectionalLight(0xfff4e0, 1.4);
-rakingLight1.position.set(8, 1, 0);
+const rakingLight1 = new THREE.DirectionalLight(0xfff4e0, 1.6);
+rakingLight1.position.set(9, 0.5, 0);
 scene.add(rakingLight1);
-const rakingLight2 = new THREE.DirectionalLight(0xe0eaff, 0.9);
-rakingLight2.position.set(-8, 1, 2);
+const rakingLight2 = new THREE.DirectionalLight(0xe0eaff, 1.1);
+rakingLight2.position.set(-9, 0.5, 1);
 scene.add(rakingLight2);
-const fillLight = new THREE.HemisphereLight(0xffffff, 0x3a3a3a, 0.5);
+
+const fillLight = new THREE.HemisphereLight(0xffffff, 0x3a3a3a, 0.4);
 scene.add(fillLight);
 
 // Grid for reference
@@ -251,6 +263,12 @@ function defaultMaterial() {
 function addMeshToScene(mesh) {
   clearCurrentModel();
   currentModel = mesh;
+  mesh.traverse((child) => {
+    if (child.isMesh) {
+      child.castShadow = true;
+      child.receiveShadow = true;
+    }
+  });
   scene.add(mesh);
   frameModel(mesh);
   document.getElementById('flipControls').style.display = 'block';
