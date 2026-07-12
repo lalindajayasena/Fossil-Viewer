@@ -144,15 +144,15 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.3;
+renderer.toneMappingExposure = 0.9;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 container.appendChild(renderer.domElement);
 
 // Lights
-scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+scene.add(new THREE.AmbientLight(0xffffff, 0.45));
 
 // Key light — strong, low-angle, casts shadows to reveal surface relief
-const keyLight = new THREE.DirectionalLight(0xfff2dd, 4.0);
+const keyLight = new THREE.DirectionalLight(0xfff2dd, 1.8);
 keyLight.position.set(6, 4, 8);
 keyLight.castShadow = true;
 keyLight.shadow.mapSize.set(2048, 2048);
@@ -166,17 +166,17 @@ keyLight.shadow.bias = -0.0005;
 scene.add(keyLight);
 
 // Raking light from the side — brings out fine surface cracks/relief via shadow contrast
-const rakingLight1 = new THREE.DirectionalLight(0xfff4e0, 2.6);
+const rakingLight1 = new THREE.DirectionalLight(0xfff4e0, 1.1);
 rakingLight1.position.set(9, 0.5, 0);
 scene.add(rakingLight1);
-const rakingLight2 = new THREE.DirectionalLight(0xe0eaff, 1.8);
+const rakingLight2 = new THREE.DirectionalLight(0xe0eaff, 0.8);
 rakingLight2.position.set(-9, 0.5, 1);
 scene.add(rakingLight2);
-const topLight = new THREE.DirectionalLight(0xffffff, 1.8);
+const topLight = new THREE.DirectionalLight(0xffffff, 0.7);
 topLight.position.set(0, 9, 1);
 scene.add(topLight);
 
-const fillLight = new THREE.HemisphereLight(0xffffff, 0x666666, 0.8);
+const fillLight = new THREE.HemisphereLight(0xffffff, 0x555555, 0.5);
 scene.add(fillLight);
 
 // Grid for reference
@@ -258,9 +258,9 @@ function frameModel(object) {
 
 function defaultMaterial() {
   return new THREE.MeshStandardMaterial({
-    color: 0xe8dcc0,
+    color: 0xb89968,
     metalness: 0.0,
-    roughness: 0.88,
+    roughness: 0.85,
     flatShading: false,
     side: THREE.DoubleSide
   });
@@ -277,7 +277,6 @@ function addMeshToScene(mesh) {
   });
   scene.add(mesh);
   frameModel(mesh);
-  orientDetailSideForward(mesh);
   document.getElementById('flipControls').style.display = 'block';
 }
 
