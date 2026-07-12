@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Deep Time Fossil Viewer</title>
+<title>Fossil Viewer</title>
 <link rel="manifest" href="./manifest.json">
-<meta name="theme-color" content="#0d0d0f">
+<meta name="theme-color" content="#ffffff">
 <style>
   html, body {
     margin: 0;
@@ -20,66 +20,195 @@
     width: 100%;
     height: 100%;
   }
-  #ui {
+  #topbar {
     position: fixed;
     top: 0;
     left: 0;
     right: 0;
-    padding: 14px;
+    padding: 12px 14px 8px 14px;
     box-sizing: border-box;
-    background: linear-gradient(to bottom, rgba(255,255,255,0.9), rgba(255,255,255,0));
+    background: linear-gradient(to bottom, rgba(255,255,255,0.96), rgba(255,255,255,0.85) 70%, rgba(255,255,255,0));
     z-index: 10;
     pointer-events: none;
   }
-  #ui * { pointer-events: auto; }
-  #title {
-    color: #2a2a2a;
-    font-size: 18px;
-    font-weight: 600;
+  #topbar * { pointer-events: auto; }
+  #titleRow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     margin-bottom: 10px;
+  }
+  #titleIcon {
+    font-size: 22px;
+  }
+  #title {
+    color: #262524;
+    font-size: 19px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
   }
   #fileInput {
     display: none;
   }
   .btn {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
     background: #caa45c;
     color: #1a1a1a;
-    padding: 10px 16px;
-    border-radius: 8px;
+    padding: 9px 14px;
+    border-radius: 9px;
     font-weight: 600;
-    font-size: 14px;
+    font-size: 13px;
     border: none;
     cursor: pointer;
+    white-space: nowrap;
   }
   .btn:active {
     background: #b8944e;
   }
+  .btn-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 9px;
+    background: #f0ece3;
+    color: #3a372f;
+    border: 1px solid #ddd6c6;
+    font-size: 17px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .btn-icon.active {
+    background: #caa45c;
+    color: #1a1a1a;
+    border-color: #caa45c;
+  }
+  .btn-icon:active {
+    background: #e2dbc9;
+  }
+  #toolRow {
+    display: flex;
+    gap: 7px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    -webkit-overflow-scrolling: touch;
+  }
   #status {
-    color: #555555;
-    font-size: 13px;
+    color: #6b6a67;
+    font-size: 12.5px;
     margin-top: 8px;
-    min-height: 18px;
+    min-height: 16px;
   }
   #hint {
     position: fixed;
     bottom: 14px;
     left: 14px;
     right: 14px;
-    color: #777777;
+    color: #8a8a86;
     font-size: 12px;
     text-align: center;
     z-index: 10;
+    pointer-events: none;
   }
   #loading {
     position: fixed;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    color: #caa45c;
+    color: #b8944e;
     font-size: 15px;
+    font-weight: 600;
     display: none;
     z-index: 20;
+  }
+  .panel {
+    position: fixed;
+    left: 14px;
+    right: 14px;
+    bottom: 14px;
+    background: #ffffff;
+    border: 1px solid #e4ddcb;
+    border-radius: 14px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.12);
+    padding: 14px;
+    box-sizing: border-box;
+    z-index: 15;
+    display: none;
+    max-height: 46vh;
+    overflow-y: auto;
+  }
+  .panel.open { display: block; }
+  .panel-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #262524;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .panel-close {
+    background: none;
+    border: none;
+    font-size: 18px;
+    color: #999;
+    cursor: pointer;
+    padding: 2px 6px;
+  }
+  .color-swatch-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .color-swatch {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 2px solid #ddd6c6;
+    cursor: pointer;
+  }
+  .color-swatch.selected {
+    border-color: #262524;
+    border-width: 3px;
+  }
+  .slider-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 4px;
+  }
+  .slider-row input[type=range] {
+    flex: 1;
+  }
+  .slider-label {
+    font-size: 12px;
+    color: #6b6a67;
+    min-width: 70px;
+  }
+  #propsTable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  #propsTable td {
+    padding: 6px 4px;
+    border-bottom: 1px solid #f0ece3;
+    color: #3a372f;
+  }
+  #propsTable td:first-child {
+    color: #8a8a86;
+    width: 45%;
+  }
+  #measureResult {
+    font-size: 14px;
+    font-weight: 600;
+    color: #262524;
+    margin-top: 8px;
+    min-height: 20px;
   }
 </style>
 </head>
@@ -87,20 +216,72 @@
 
 <div id="canvas-container"></div>
 
-<div id="ui">
-  <div id="title">🦴 Deep Time Fossil Viewer</div>
+<div id="topbar">
+  <div id="titleRow">
+    <span id="titleIcon">🦴</span>
+    <span id="title">Fossil Viewer</span>
+  </div>
   <label for="fileInput" class="btn">Load Fossil File</label>
   <input type="file" id="fileInput" accept=".stl,.obj,.ply,.glb,.gltf">
   <div id="status">No file loaded. Supports STL, OBJ, PLY, GLB.</div>
-  <div id="flipControls" style="margin-top:8px; display:none;">
-    <button class="btn" id="flipXBtn" style="margin-right:6px;">Flip ↔</button>
-    <button class="btn" id="flipYBtn" style="margin-right:6px;">Flip ↕</button>
-    <button class="btn" id="resetBtn">Reset View</button>
+
+  <div id="toolRow" style="margin-top:10px; display:none;">
+    <button class="btn-icon" id="flipXBtn" title="Flip horizontal">↔</button>
+    <button class="btn-icon" id="flipYBtn" title="Flip vertical">↕</button>
+    <button class="btn-icon" id="resetBtn" title="Reset view">⟳</button>
+    <button class="btn-icon" id="measureBtn" title="Measure distance">📏</button>
+    <button class="btn-icon" id="sliceBtn" title="Slice view">◐</button>
+    <button class="btn-icon" id="colorBtn" title="Change color">🎨</button>
+    <button class="btn-icon" id="propsBtn" title="Properties">ℹ</button>
   </div>
 </div>
 
+<!-- Measure panel -->
+<div class="panel" id="measurePanel">
+  <div class="panel-title">Measure Distance <button class="panel-close" data-close="measurePanel">✕</button></div>
+  <div style="font-size:13px; color:#6b6a67;">Tap two points on the fossil to measure the distance between them.</div>
+  <div id="measureResult">No points selected.</div>
+  <button class="btn" id="measureClearBtn" style="margin-top:10px;">Clear Points</button>
+</div>
+
+<!-- Slice panel -->
+<div class="panel" id="slicePanel">
+  <div class="panel-title">Slice View <button class="panel-close" data-close="slicePanel">✕</button></div>
+  <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:#3a372f;">
+    <input type="checkbox" id="sliceToggle"> Enable slicing
+  </label>
+  <div class="slider-row">
+    <span class="slider-label">Axis</span>
+    <select id="sliceAxis" style="flex:1; padding:6px;">
+      <option value="x">X</option>
+      <option value="y" selected>Y</option>
+      <option value="z">Z</option>
+    </select>
+  </div>
+  <div class="slider-row">
+    <span class="slider-label">Position</span>
+    <input type="range" id="slicePos" min="-100" max="100" value="0">
+  </div>
+  <div class="slider-row">
+    <span class="slider-label">Flip side</span>
+    <input type="checkbox" id="sliceFlip">
+  </div>
+</div>
+
+<!-- Color panel -->
+<div class="panel" id="colorPanel">
+  <div class="panel-title">Fossil Color <button class="panel-close" data-close="colorPanel">✕</button></div>
+  <div class="color-swatch-row" id="colorSwatches"></div>
+</div>
+
+<!-- Properties panel -->
+<div class="panel" id="propsPanel">
+  <div class="panel-title">Properties <button class="panel-close" data-close="propsPanel">✕</button></div>
+  <table id="propsTable"></table>
+</div>
+
 <div id="loading">Loading model...</div>
-<div id="hint">Drag to rotate · Pinch to zoom</div>
+<div id="hint">Drag to rotate · Pinch to zoom · Double-tap to re-center</div>
 
 <script type="importmap">
 {
@@ -184,6 +365,8 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = false;
 
 let currentModel = null;
+let currentFileName = '';
+let currentFileSize = 0;
 
 function clearCurrentModel() {
   if (currentModel) {
@@ -225,6 +408,7 @@ function frameModel(object) {
   const targetSize = 2.5;
   const scale = targetSize / maxDim;
   object.scale.setScalar(scale);
+  object.userData.appliedScale = scale;
 
   // Recompute box after scaling/centering to get accurate framing
   object.updateMatrixWorld(true);
@@ -262,6 +446,7 @@ function defaultMaterial() {
 
 function addMeshToScene(mesh) {
   clearCurrentModel();
+  if (typeof clearMeasurement === 'function') clearMeasurement();
   currentModel = mesh;
   mesh.traverse((child) => {
     if (child.isMesh) {
@@ -271,7 +456,8 @@ function addMeshToScene(mesh) {
   });
   scene.add(mesh);
   frameModel(mesh);
-  document.getElementById('flipControls').style.display = 'block';
+  document.getElementById('toolRow').style.display = 'flex';
+  updateProperties(mesh, currentFileName, currentFileSize);
 }
 
 // Detects which side of a thin slab has more surface detail (the fossil face)
@@ -353,28 +539,32 @@ resetBtn.addEventListener('click', () => {
 });
 
 // Double-tap on the model to make that point the new rotation pivot
+// Interaction mode: 'none' (default recenter-on-double-tap) or 'measure'
+let interactionMode = 'none';
 const raycaster = new THREE.Raycaster();
 const tapPos = new THREE.Vector2();
 let lastTapTime = 0;
 
-function handleDoubleTap(clientX, clientY) {
-  if (!currentModel) return;
-
+function getModelPointFromTap(clientX, clientY) {
+  if (!currentModel) return null;
   const rect = renderer.domElement.getBoundingClientRect();
   tapPos.x = ((clientX - rect.left) / rect.width) * 2 - 1;
   tapPos.y = -((clientY - rect.top) / rect.height) * 2 + 1;
-
   raycaster.setFromCamera(tapPos, camera);
   const intersects = raycaster.intersectObject(currentModel, true);
+  return intersects.length > 0 ? intersects[0].point.clone() : null;
+}
 
-  if (intersects.length > 0) {
-    const point = intersects[0].point;
+function handleDoubleTap(clientX, clientY) {
+  const point = getModelPointFromTap(clientX, clientY);
+  if (point) {
     controls.target.copy(point);
     controls.update();
   }
 }
 
 renderer.domElement.addEventListener('touchend', (e) => {
+  if (interactionMode === 'measure') return; // measure uses single taps instead
   const now = Date.now();
   if (now - lastTapTime < 300 && e.changedTouches.length > 0) {
     const touch = e.changedTouches[0];
@@ -384,7 +574,193 @@ renderer.domElement.addEventListener('touchend', (e) => {
 });
 
 renderer.domElement.addEventListener('dblclick', (e) => {
+  if (interactionMode === 'measure') return;
   handleDoubleTap(e.clientX, e.clientY);
+});
+
+// ---------- MEASURE FEATURE ----------
+let measurePoints = [];
+let measureMarkers = [];
+let measureLine = null;
+const measureResultEl = document.getElementById('measureResult');
+
+function clearMeasurement() {
+  measurePoints = [];
+  measureMarkers.forEach(m => scene.remove(m));
+  measureMarkers = [];
+  if (measureLine) { scene.remove(measureLine); measureLine = null; }
+  measureResultEl.textContent = 'No points selected.';
+}
+
+function addMeasurePoint(point) {
+  const markerGeo = new THREE.SphereGeometry(0.02, 12, 12);
+  const markerMat = new THREE.MeshBasicMaterial({ color: 0xe74c3c });
+  const marker = new THREE.Mesh(markerGeo, markerMat);
+  marker.position.copy(point);
+  scene.add(marker);
+  measureMarkers.push(marker);
+  measurePoints.push(point);
+
+  if (measurePoints.length === 2) {
+    const [a, b] = measurePoints;
+    const dist = a.distanceTo(b);
+    const scaleFactor = currentModel && currentModel.userData.appliedScale ? currentModel.userData.appliedScale : 1;
+    const realDist = dist / scaleFactor;
+    measureResultEl.textContent = 'Distance: ' + realDist.toFixed(2) + ' (file units, e.g. mm)';
+
+    const geo = new THREE.BufferGeometry().setFromPoints([a, b]);
+    const mat = new THREE.LineBasicMaterial({ color: 0xe74c3c, linewidth: 2 });
+    measureLine = new THREE.Line(geo, mat);
+    scene.add(measureLine);
+  } else if (measurePoints.length > 2) {
+    clearMeasurement();
+    addMeasurePoint(point);
+  }
+}
+
+renderer.domElement.addEventListener('click', (e) => {
+  if (interactionMode !== 'measure') return;
+  const point = getModelPointFromTap(e.clientX, e.clientY);
+  if (point) addMeasurePoint(point);
+});
+
+document.getElementById('measureClearBtn').addEventListener('click', clearMeasurement);
+
+// ---------- SLICE FEATURE ----------
+const clipPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+renderer.localClippingEnabled = true;
+
+function updateClipPlane() {
+  const enabled = document.getElementById('sliceToggle').checked;
+  const axis = document.getElementById('sliceAxis').value;
+  const posVal = parseFloat(document.getElementById('slicePos').value) / 100;
+  const flip = document.getElementById('sliceFlip').checked;
+
+  const normal = new THREE.Vector3(
+    axis === 'x' ? 1 : 0,
+    axis === 'y' ? 1 : 0,
+    axis === 'z' ? 1 : 0
+  );
+  if (flip) normal.negate();
+  clipPlane.normal.copy(normal);
+  clipPlane.constant = posVal * (flip ? -1 : 1) * 2.5;
+
+  if (currentModel) {
+    currentModel.traverse((child) => {
+      if (child.isMesh) {
+        child.material.clippingPlanes = enabled ? [clipPlane] : [];
+        child.material.needsUpdate = true;
+      }
+    });
+  }
+}
+
+document.getElementById('sliceToggle').addEventListener('change', updateClipPlane);
+document.getElementById('sliceAxis').addEventListener('change', updateClipPlane);
+document.getElementById('slicePos').addEventListener('input', updateClipPlane);
+document.getElementById('sliceFlip').addEventListener('change', updateClipPlane);
+
+// ---------- COLOR FEATURE ----------
+const FOSSIL_COLORS = [
+  { name: 'Bone Tan', hex: 0xb89968 },
+  { name: 'Limestone', hex: 0xe8dcc0 },
+  { name: 'Dark Grey', hex: 0x5a5a5a },
+  { name: 'Charcoal', hex: 0x2b2b2b },
+  { name: 'Ivory', hex: 0xf3ecd8 },
+  { name: 'Rust', hex: 0x9c5a3c },
+  { name: 'Amber', hex: 0xc98a3e },
+  { name: 'Slate Blue', hex: 0x5f6b7a }
+];
+
+const colorSwatchesEl = document.getElementById('colorSwatches');
+FOSSIL_COLORS.forEach((c) => {
+  const swatch = document.createElement('div');
+  swatch.className = 'color-swatch';
+  swatch.style.background = '#' + c.hex.toString(16).padStart(6, '0');
+  swatch.title = c.name;
+  swatch.addEventListener('click', () => {
+    document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
+    swatch.classList.add('selected');
+    applyModelColor(c.hex);
+  });
+  colorSwatchesEl.appendChild(swatch);
+});
+
+function applyModelColor(hex) {
+  if (!currentModel) return;
+  currentModel.traverse((child) => {
+    if (child.isMesh && child.material && !child.material.vertexColors) {
+      child.material.color.setHex(hex);
+    }
+  });
+}
+
+// ---------- PROPERTIES FEATURE ----------
+function updateProperties(mesh, fileName, fileSize) {
+  let vertCount = 0;
+  let faceCount = 0;
+  const box = new THREE.Box3().setFromObject(mesh);
+  const size = box.getSize(new THREE.Vector3());
+
+  mesh.traverse((child) => {
+    if (child.isMesh && child.geometry) {
+      const pos = child.geometry.attributes.position;
+      if (pos) vertCount += pos.count;
+      if (child.geometry.index) faceCount += child.geometry.index.count / 3;
+    }
+  });
+
+  const sizeKB = fileSize ? (fileSize / 1024).toFixed(1) + ' KB' : '—';
+  const rows = [
+    ['File name', fileName || '—'],
+    ['File size', sizeKB],
+    ['Vertices', vertCount.toLocaleString()],
+    ['Faces', Math.round(faceCount).toLocaleString()],
+    ['Width (X)', size.x.toFixed(3)],
+    ['Height (Y)', size.y.toFixed(3)],
+    ['Depth (Z)', size.z.toFixed(3)]
+  ];
+
+  const table = document.getElementById('propsTable');
+  table.innerHTML = rows.map(([k, v]) =>
+    '<tr><td>' + k + '</td><td>' + v + '</td></tr>'
+  ).join('');
+}
+
+// ---------- PANEL TOGGLING ----------
+const panels = {
+  measurePanel: document.getElementById('measurePanel'),
+  slicePanel: document.getElementById('slicePanel'),
+  colorPanel: document.getElementById('colorPanel'),
+  propsPanel: document.getElementById('propsPanel')
+};
+
+function closeAllPanels() {
+  Object.values(panels).forEach(p => p.classList.remove('open'));
+  document.getElementById('measureBtn').classList.remove('active');
+  document.getElementById('sliceBtn').classList.remove('active');
+  document.getElementById('colorBtn').classList.remove('active');
+  document.getElementById('propsBtn').classList.remove('active');
+  interactionMode = 'none';
+}
+
+function togglePanel(panelId, btnId, mode) {
+  const isOpen = panels[panelId].classList.contains('open');
+  closeAllPanels();
+  if (!isOpen) {
+    panels[panelId].classList.add('open');
+    document.getElementById(btnId).classList.add('active');
+    interactionMode = mode || 'none';
+  }
+}
+
+document.getElementById('measureBtn').addEventListener('click', () => togglePanel('measurePanel', 'measureBtn', 'measure'));
+document.getElementById('sliceBtn').addEventListener('click', () => togglePanel('slicePanel', 'sliceBtn'));
+document.getElementById('colorBtn').addEventListener('click', () => togglePanel('colorPanel', 'colorBtn'));
+document.getElementById('propsBtn').addEventListener('click', () => togglePanel('propsPanel', 'propsBtn'));
+
+document.querySelectorAll('.panel-close').forEach((btn) => {
+  btn.addEventListener('click', () => closeAllPanels());
 });
 
 function setStatus(text) {
@@ -395,6 +771,8 @@ function loadFile(file) {
   const name = file.name.toLowerCase();
   const ext = name.substring(name.lastIndexOf('.') + 1);
   const reader = new FileReader();
+  currentFileName = file.name;
+  currentFileSize = file.size;
 
   loadingEl.style.display = 'block';
   setStatus('Loading: ' + file.name);
