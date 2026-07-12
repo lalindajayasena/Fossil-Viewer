@@ -126,19 +126,29 @@ const camera = new THREE.PerspectiveCamera(
 );
 camera.position.set(0, 0, 5);
 
+// Light attached to camera so the model is always lit, no matter how it's rotated
+const cameraLight = new THREE.PointLight(0xffffff, 1.5, 0, 0.5);
+camera.add(cameraLight);
+scene.add(camera);
+
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 container.appendChild(renderer.domElement);
 
 // Lights
-scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-const dirLight1 = new THREE.DirectionalLight(0xffffff, 1.0);
+scene.add(new THREE.AmbientLight(0xffffff, 1.1));
+const dirLight1 = new THREE.DirectionalLight(0xffffff, 1.8);
 dirLight1.position.set(5, 10, 7);
 scene.add(dirLight1);
-const dirLight2 = new THREE.DirectionalLight(0xffffff, 0.4);
-dirLight2.position.set(-5, -5, -5);
+const dirLight2 = new THREE.DirectionalLight(0xffffff, 1.2);
+dirLight2.position.set(-5, 3, -5);
 scene.add(dirLight2);
+const dirLight3 = new THREE.DirectionalLight(0xffffff, 0.8);
+dirLight3.position.set(0, -8, 3);
+scene.add(dirLight3);
+const fillLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6);
+scene.add(fillLight);
 
 // Grid for reference
 const grid = new THREE.GridHelper(10, 10, 0x444444, 0x222222);
