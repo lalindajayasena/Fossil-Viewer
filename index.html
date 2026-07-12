@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Deep Time Fossil Viewer</title>
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#0d0d0f">
 <style>
   html, body {
     margin: 0;
@@ -92,7 +94,8 @@
   <div id="status">No file loaded. Supports STL, OBJ, PLY, GLB.</div>
   <div id="flipControls" style="margin-top:8px; display:none;">
     <button class="btn" id="flipXBtn" style="margin-right:6px;">Flip ↔</button>
-    <button class="btn" id="flipYBtn">Flip ↕</button>
+    <button class="btn" id="flipYBtn" style="margin-right:6px;">Flip ↕</button>
+    <button class="btn" id="resetBtn">Reset View</button>
   </div>
 </div>
 
@@ -141,17 +144,21 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 container.appendChild(renderer.domElement);
 
 // Lights
-scene.add(new THREE.AmbientLight(0xffffff, 1.1));
-const dirLight1 = new THREE.DirectionalLight(0xffffff, 1.8);
+scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+const dirLight1 = new THREE.DirectionalLight(0xffffff, 1.6);
 dirLight1.position.set(5, 10, 7);
 scene.add(dirLight1);
-const dirLight2 = new THREE.DirectionalLight(0xffffff, 1.2);
+const dirLight2 = new THREE.DirectionalLight(0xffffff, 0.6);
 dirLight2.position.set(-5, 3, -5);
 scene.add(dirLight2);
-const dirLight3 = new THREE.DirectionalLight(0xffffff, 0.8);
-dirLight3.position.set(0, -8, 3);
-scene.add(dirLight3);
-const fillLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6);
+// Raking light from the side — brings out fine surface cracks/relief via shadow contrast
+const rakingLight1 = new THREE.DirectionalLight(0xfff4e0, 1.4);
+rakingLight1.position.set(8, 1, 0);
+scene.add(rakingLight1);
+const rakingLight2 = new THREE.DirectionalLight(0xe0eaff, 0.9);
+rakingLight2.position.set(-8, 1, 2);
+scene.add(rakingLight2);
+const fillLight = new THREE.HemisphereLight(0xffffff, 0x3a3a3a, 0.5);
 scene.add(fillLight);
 
 // Grid for reference
@@ -233,9 +240,9 @@ function frameModel(object) {
 
 function defaultMaterial() {
   return new THREE.MeshStandardMaterial({
-    color: 0xcaa45c,
-    metalness: 0.1,
-    roughness: 0.7,
+    color: 0xcbb894,
+    metalness: 0.0,
+    roughness: 0.85,
     flatShading: false,
     side: THREE.DoubleSide
   });
@@ -261,6 +268,13 @@ flipXBtn.addEventListener('click', () => {
 flipYBtn.addEventListener('click', () => {
   if (currentModel) {
     currentModel.rotation.x += Math.PI;
+  }
+});
+
+const resetBtn = document.getElementById('resetBtn');
+resetBtn.addEventListener('click', () => {
+  if (currentModel) {
+    frameModel(currentModel);
   }
 });
 
@@ -402,6 +416,17 @@ function animate() {
   renderer.render(scene, camera);
 }
 animate();
+
+// Register service worker for offline support
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').then(() => {
+      console.log('Service worker registered — app now works offline.');
+    }).catch((err) => {
+      console.warn('Service worker registration failed:', err);
+    });
+  });
+}
 </script>
 
 </body>
