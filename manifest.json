@@ -1,0 +1,17 @@
+{
+  "name": "Deep Time Fossil Viewer",
+  "short_name": "Fossil Viewer",
+  "description": "A 3D fossil viewer for STL, OBJ, PLY, and GLB files.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0d0d0f",
+  "theme_color": "#0d0d0f",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
