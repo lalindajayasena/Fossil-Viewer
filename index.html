@@ -530,7 +530,6 @@ function addMeshToScene(mesh) {
     printStatusEl.style.background = '#f0ece3';
     printStatusEl.style.color = '#6b6a67';
   }
-  updatePrintabilityIndicator(mesh);
 
   if (typeof viewCycleBtn !== 'undefined') {
     currentViewIndex = -1;
@@ -859,77 +858,6 @@ document.getElementById('customColorPicker').addEventListener('input', (e) => {
 });
 
 // ---------- PROPERTIES FEATURE ----------
-// ---------- PRINTABILITY CHECK ----------
-// A mesh is "3D-print-safe" (manifold/watertight) when every triangle edge
-// is shared by exactly two triangles. Holes or non-manifold edges mean the
-// shape isn't a fully sealed solid, which most slicers will reject or fix incorrectly.
-function checkPrintability(mesh) {
-  const edgeMap = new Map();
-  let totalTriangles = 0;
-  let hasNonIndexedGeometry = false;
-
-  mesh.traverse((child) => {
-    if (!child.isMesh || !child.geometry) return;
-    const geo = child.geometry;
-    const pos = geo.attributes.position;
-    if (!pos) return;
-
-    if (!geo.index) {
-      hasNonIndexedGeometry = true;
-      return;
-    }
-
-    const idx = geo.index.array;
-    totalTriangles += idx.length / 3;
-
-    // Sample cap to keep this fast on huge scans (millions of faces)
-    const maxTrianglesToCheck = 200000;
-    const step = idx.length / 3 > maxTrianglesToCheck
-      ? Math.ceil((idx.length / 3) / maxTrianglesToCheck)
-      : 1;
-
-    for (let i = 0; i < idx.length; i += 3 * step) {
-      const a = idx[i], b = idx[i + 1], c = idx[i + 2];
-      if (a === undefined || b === undefined || c === undefined) continue;
-      [[a, b], [b, c], [c, a]].forEach(([v1, v2]) => {
-        const key = v1 < v2 ? v1 + '_' + v2 : v2 + '_' + v1;
-        edgeMap.set(key, (edgeMap.get(key) || 0) + 1);
-      });
-    }
-  });
-
-  if (hasNonIndexedGeometry && totalTriangles === 0) {
-    return { printable: false, reason: 'Mesh format not analyzable (no face index data).' };
-  }
-
-  let badEdges = 0;
-  edgeMap.forEach((count) => {
-    if (count !== 2) badEdges++;
-  });
-
-  const total = edgeMap.size || 1;
-  const badRatio = badEdges / total;
-
-  if (badRatio < 0.01) {
-    return { printable: true, reason: 'Mesh appears watertight (closed surface).' };
-  } else {
-    return { printable: false, reason: 'Mesh has open edges or gaps (' + (badRatio * 100).toFixed(1) + '% irregular) — likely needs repair before printing.' };
-  }
-}
-
-function updatePrintabilityIndicator(mesh) {
-  const el = document.getElementById('printability');
-  try {
-    const result = checkPrintability(mesh);
-    el.style.display = 'block';
-    el.className = result.printable ? 'printable' : 'not-printable';
-    el.textContent = (result.printable ? '✓ 3D-printable — ' : '✕ Not print-ready — ') + result.reason;
-  } catch (err) {
-    el.style.display = 'block';
-    el.className = 'not-printable';
-    el.textContent = 'Could not determine printability for this file.';
-  }
-}
 
 // Checks if a mesh is "watertight" (closed, no holes) — a rough proxy for 3D-printability.
 // Every edge in a fully closed mesh should be shared by exactly 2 triangles.
