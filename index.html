@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deep Time Fossil Viewer</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    width: 100%;
+    height: 100%;
+    background: #0d0d0f;
+    font-family: -apple-system, Roboto, Arial, sans-serif;
+  }
+  #canvas-container {
+    width: 100%;
+    height: 100%;
+  }
+  #ui {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    padding: 14px;
+    box-sizing: border-box;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.75), rgba(0,0,0,0));
+    z-index: 10;
+    pointer-events: none;
+  }
+  #ui * { pointer-events: auto; }
+  #title {
+    color: #f2e9d8;
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 10px;
+  }
+  #fileInput {
+    display: none;
+  }
+  .btn {
+    display: inline-block;
+    background: #caa45c;
+    color: #1a1a1a;
+    padding: 10px 16px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 14px;
+    border: none;
+    cursor: pointer;
+  }
+  .btn:active {
+    background: #b8944e;
+  }
+  #status {
+    color: #cfcfcf;
+    font-size: 13px;
+    margin-top: 8px;
+    min-height: 18px;
+  }
+  #hint {
+    position: fixed;
+    bottom: 14px;
+    left: 14px;
+    right: 14px;
+    color: #999;
+    font-size: 12px;
+    text-align: center;
+    z-index: 10;
+  }
+  #loading {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #caa45c;
+    font-size: 15px;
+    display: none;
+    z-index: 20;
+  }
+</style>
+</head>
+<body>
+
+<div id="canvas-container"></div>
+
+<div id="ui">
+  <div id="title">🦴 Deep Time Fossil Viewer</div>
+  <label for="fileInput" class="btn">Load Fossil File</label>
+  <input type="file" id="fileInput" accept=".stl,.obj,.ply,.glb,.gltf">
+  <div id="status">No file loaded. Supports STL, OBJ, PLY, GLB.</div>
+</div>
+
+<div id="loading">Loading model...</div>
+<div id="hint">Drag to rotate · Pinch to zoom</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+const container = document.getElementById('canvas-container');
+const statusEl = document.getElementById('status');
+const loadingEl = document.getElementById('loading');
+const fileInput = document.getElementById('fileInput');
+
+// Scene setup
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0d0d0f);
+
+const camera = new THREE.PerspectiveCamera(
+  50, window.innerWidth / window.innerHeight, 0.01, 5000
+);
+camera.position.set(0, 0, 5);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+container.appendChild(renderer.domElement);
+
+// Lights
+scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+const dirLight1 = new THREE.DirectionalLight(0xffffff, 1.0);
+dirLight1.position.set(5, 10, 7);
+scene.add(dirLight1);
+const dirLight2 = new THREE.DirectionalLight(0xffffff, 0.4);
+dirLight2.position.set(-5, -5, -5);
+scene.add(dirLight2);
+
+// Grid for reference
+const grid = new THREE.GridHelper(10, 10, 0x444444, 0x222222);
+grid.position.y = -1.5;
+scene.add(grid);
+
+// Controls
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+
+let currentModel = null;
+
+function clearCurrentModel() {
+  if (currentModel) {
+    scene.remove(currentModel);
+    currentModel.traverse((child) => {
+      if (child.geometry) child.geometry.dispose();
+      if (child.material) {
+        if (Array.isArray(child.material)) {
+          child.material.forEach(m => m.dispose());
+        } else {
+          child.material.dispose();
+        }
+      }
+    });
+    currentModel = null;
+  }
+}
+
+function frameModel(object) {
+  const box = new THREE.Box3().setFromObject(object);
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+
+  object.position.sub(center);
+
+  const maxDim = Math.max(size.x, size.y, size.z) || 1;
+  const scale = 2.5 / maxDim;
+  object.scale.setScalar(scale);
+
+  const distance = 5;
+  camera.position.set(distance * 0.6, distance * 0.4, distance);
+  camera.lookAt(0, 0, 0);
+  controls.target.set(0, 0, 0);
+  controls.update();
+}
+
+function defaultMaterial() {
+  return new THREE.MeshStandardMaterial({
+    color: 0xcaa45c,
+    metalness: 0.1,
+    roughness: 0.7,
+    flatShading: false
+  });
+}
+
+function addMeshToScene(mesh) {
+  clearCurrentModel();
+  currentModel = mesh;
+  scene.add(mesh);
+  frameModel(mesh);
+}
+
+function setStatus(text) {
+  statusEl.textContent = text;
+}
+
+function loadFile(file) {
+  const name = file.name.toLowerCase();
+  const ext = name.substring(name.lastIndexOf('.') + 1);
+  const reader = new FileReader();
+
+  loadingEl.style.display = 'block';
+  setStatus('Loading: ' + file.name);
+
+  reader.onerror = () => {
+    loadingEl.style.display = 'none';
+    setStatus('Error reading file.');
+  };
+
+  if (ext === 'stl') {
+    reader.onload = (e) => {
+      try {
+        const loader = new STLLoader();
+        const geometry = loader.parse(e.target.result);
+        geometry.computeVertexNormals();
+        const mesh = new THREE.Mesh(geometry, defaultMaterial());
+        addMeshToScene(mesh);
+        setStatus('Loaded: ' + file.name);
+      } catch (err) {
+        setStatus('Failed to parse STL: ' + err.message);
+      }
+      loadingEl.style.display = 'none';
+    };
+    reader.readAsArrayBuffer(file);
+
+  } else if (ext === 'obj') {
+    reader.onload = (e) => {
+      try {
+        const loader = new OBJLoader();
+        const object = loader.parse(e.target.result);
+        object.traverse((child) => {
+          if (child.isMesh) {
+            child.material = defaultMaterial();
+          }
+        });
+        addMeshToScene(object);
+        setStatus('Loaded: ' + file.name);
+      } catch (err) {
+        setStatus('Failed to parse OBJ: ' + err.message);
+      }
+      loadingEl.style.display = 'none';
+    };
+    reader.readAsText(file);
+
+  } else if (ext === 'ply') {
+    reader.onload = (e) => {
+      try {
+        const loader = new PLYLoader();
+        const geometry = loader.parse(e.target.result);
+        geometry.computeVertexNormals();
+        let material;
+        if (geometry.hasAttribute('color')) {
+          material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7 });
+        } else {
+          material = defaultMaterial();
+        }
+        const mesh = new THREE.Mesh(geometry, material);
+        addMeshToScene(mesh);
+        setStatus('Loaded: ' + file.name);
+      } catch (err) {
+        setStatus('Failed to parse PLY: ' + err.message);
+      }
+      loadingEl.style.display = 'none';
+    };
+    reader.readAsArrayBuffer(file);
+
+  } else if (ext === 'glb' || ext === 'gltf') {
+    reader.onload = (e) => {
+      const loader = new GLTFLoader();
+      loader.parse(e.target.result, '', (gltf) => {
+        addMeshToScene(gltf.scene);
+        setStatus('Loaded: ' + file.name);
+        loadingEl.style.display = 'none';
+      }, (err) => {
+        setStatus('Failed to parse GLB/GLTF: ' + err.message);
+        loadingEl.style.display = 'none';
+      });
+    };
+    reader.readAsArrayBuffer(file);
+
+  } else {
+    setStatus('Unsupported file type: .' + ext);
+    loadingEl.style.display = 'none';
+  }
+}
+
+fileInput.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (file) loadFile(file);
+});
+
+// Handle window resize
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// Animation loop
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+
+</body>
+</html>
