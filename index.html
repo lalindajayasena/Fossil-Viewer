@@ -229,6 +229,7 @@
     <button class="btn-icon" id="flipXBtn" title="Flip horizontal">↔</button>
     <button class="btn-icon" id="flipYBtn" title="Flip vertical">↕</button>
     <button class="btn-icon" id="resetBtn" title="Reset view">⟳</button>
+    <button class="btn-icon" id="viewCycleBtn" title="Front view">⬤</button>
     <button class="btn-icon" id="measureBtn" title="Measure distance">📏</button>
     <button class="btn-icon" id="sliceBtn" title="Slice view">◐</button>
     <button class="btn-icon" id="colorBtn" title="Change color">🎨</button>
@@ -458,6 +459,12 @@ function addMeshToScene(mesh) {
   frameModel(mesh);
   document.getElementById('toolRow').style.display = 'flex';
   updateProperties(mesh, currentFileName, currentFileSize);
+
+  if (typeof viewCycleBtn !== 'undefined') {
+    currentViewIndex = -1;
+    viewCycleBtn.textContent = '⬤';
+    viewCycleBtn.title = 'Front view';
+  }
 }
 
 // Detects which side of a thin slab has more surface detail (the fossil face)
@@ -535,7 +542,65 @@ const resetBtn = document.getElementById('resetBtn');
 resetBtn.addEventListener('click', () => {
   if (currentModel) {
     frameModel(currentModel);
+    currentViewIndex = -1;
+    viewCycleBtn.textContent = '⬤';
+    viewCycleBtn.title = 'Front view';
   }
+});
+
+// ---------- VIEW CYCLE BUTTON ----------
+const VIEWS = [
+  { name: 'Front',  icon: '⬤', dir: [0, 0, 1] },
+  { name: 'Back',   icon: '◯', dir: [0, 0, -1] },
+  { name: 'Left',   icon: '◀', dir: [-1, 0, 0] },
+  { name: 'Right',  icon: '▶', dir: [1, 0, 0] },
+  { name: 'Top',    icon: '▲', dir: [0, 1, 0] },
+  { name: 'Bottom', icon: '▼', dir: [0, -1, 0] }
+];
+let currentViewIndex = -1; // -1 = default/free view, not yet cycled
+
+const viewCycleBtn = document.getElementById('viewCycleBtn');
+
+function applyView(index) {
+  if (!currentModel) return;
+
+  currentModel.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(currentModel);
+  const center = box.getCenter(new THREE.Vector3());
+  const size = box.getSize(new THREE.Vector3());
+
+  const fitRadius = size.length() * 0.5 || 1;
+  const fov = camera.fov * (Math.PI / 180);
+  const distance = Math.max((fitRadius / Math.sin(fov / 2)) * 1.4, 1.5);
+
+  const view = VIEWS[index];
+  const [dx, dy, dz] = view.dir;
+
+  camera.position.set(
+    center.x + dx * distance,
+    center.y + dy * distance,
+    center.z + dz * distance
+  );
+
+  // Use a stable "up" vector so top/bottom views don't flip oddly
+  if (view.name === 'Top' || view.name === 'Bottom') {
+    camera.up.set(0, 0, -1);
+  } else {
+    camera.up.set(0, 1, 0);
+  }
+
+  camera.lookAt(center);
+  controls.target.copy(center);
+  controls.update();
+
+  viewCycleBtn.textContent = view.icon;
+  viewCycleBtn.title = view.name + ' view';
+}
+
+viewCycleBtn.addEventListener('click', () => {
+  if (!currentModel) return;
+  currentViewIndex = (currentViewIndex + 1) % VIEWS.length;
+  applyView(currentViewIndex);
 });
 
 // Double-tap on the model to make that point the new rotation pivot
