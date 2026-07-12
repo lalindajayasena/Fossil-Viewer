@@ -1,12 +1,12 @@
 {
-  "name": "Fossil Viewer",
-  "short_name": "Fossil Viewer",
+  "name": "LDJ Viewer",
+  "short_name": "LDJ Viewer",
   "description": "A 3D fossil viewer for STL, OBJ, PLY, and GLB files.",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#ffffff",
-  "orientation": "any",
+  "background_color": "#f2efe9",
+  "theme_color": "#f2efe9",
+  "orientation": "portrait",
   "icons": [
     {
       "src": "icon.svg",

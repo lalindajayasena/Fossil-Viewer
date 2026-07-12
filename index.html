@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Fossil Viewer</title>
+<title>LDJ Viewer</title>
 <link rel="manifest" href="./manifest.json">
-<meta name="theme-color" content="#ffffff">
+<meta name="theme-color" content="#f2efe9">
 <style>
   html, body {
     margin: 0;
@@ -13,7 +13,7 @@
     overflow: hidden;
     width: 100%;
     height: 100%;
-    background: #ffffff;
+    background: #f2efe9;
     font-family: -apple-system, Roboto, Arial, sans-serif;
   }
   #canvas-container {
@@ -27,7 +27,7 @@
     right: 0;
     padding: 12px 14px 8px 14px;
     box-sizing: border-box;
-    background: linear-gradient(to bottom, rgba(255,255,255,0.96), rgba(255,255,255,0.85) 70%, rgba(255,255,255,0));
+    background: linear-gradient(to bottom, rgba(242,239,233,0.97), rgba(242,239,233,0.88) 70%, rgba(242,239,233,0));
     z-index: 10;
     pointer-events: none;
   }
@@ -105,7 +105,7 @@
   }
   #hint {
     position: fixed;
-    bottom: 14px;
+    bottom: 40px;
     left: 14px;
     right: 14px;
     color: #8a8a86;
@@ -113,6 +113,26 @@
     text-align: center;
     z-index: 10;
     pointer-events: none;
+  }
+  #printStatus {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 8px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    text-align: center;
+    z-index: 10;
+    display: none;
+  }
+  #printStatus.printable {
+    background: #e8f5e9;
+    color: #2e7d32;
+  }
+  #printStatus.not-printable {
+    background: #fdecea;
+    color: #c0392b;
   }
   #loading {
     position: fixed;
@@ -209,6 +229,25 @@
     color: #262524;
     margin-top: 8px;
     min-height: 20px;
+  }  #printability {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 8px 14px;
+    box-sizing: border-box;
+    font-size: 12px;
+    font-weight: 600;
+    text-align: center;
+    z-index: 12;
+  }
+  #printability.printable {
+    background: #e6f4ea;
+    color: #1e7b34;
+  }
+  #printability.not-printable {
+    background: #fdeaea;
+    color: #b3261e;
   }
 </style>
 </head>
@@ -219,7 +258,7 @@
 <div id="topbar">
   <div id="titleRow">
     <span id="titleIcon">🦴</span>
-    <span id="title">Fossil Viewer</span>
+    <span id="title">LDJ Viewer</span>
   </div>
   <label for="fileInput" class="btn">Load Fossil File</label>
   <input type="file" id="fileInput" accept=".stl,.obj,.ply,.glb,.gltf">
@@ -234,6 +273,7 @@
     <button class="btn-icon" id="sliceBtn" title="Slice view">◐</button>
     <button class="btn-icon" id="colorBtn" title="Change color">🎨</button>
     <button class="btn-icon" id="propsBtn" title="Properties">ℹ</button>
+    <button class="btn-icon" id="fullscreenBtn" title="Full view">⛶</button>
   </div>
 </div>
 
@@ -273,6 +313,10 @@
 <div class="panel" id="colorPanel">
   <div class="panel-title">Fossil Color <button class="panel-close" data-close="colorPanel">✕</button></div>
   <div class="color-swatch-row" id="colorSwatches"></div>
+  <div style="margin-top:14px; padding-top:12px; border-top:1px solid #f0ece3; display:flex; align-items:center; gap:10px;">
+    <span style="font-size:13px; color:#6b6a67;">Custom color:</span>
+    <input type="color" id="customColorPicker" value="#b89968" style="width:44px; height:36px; border:none; border-radius:8px; cursor:pointer;">
+  </div>
 </div>
 
 <!-- Properties panel -->
@@ -283,6 +327,8 @@
 
 <div id="loading">Loading model...</div>
 <div id="hint">Drag to rotate · Pinch to zoom · Double-tap to re-center</div>
+<div id="printStatus"></div>
+<div id="printability" style="display:none;"></div>
 
 <script type="importmap">
 {
@@ -308,7 +354,7 @@ const fileInput = document.getElementById('fileInput');
 
 // Scene setup
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xffffff);
+scene.background = new THREE.Color(0xf2efe9);
 
 const camera = new THREE.PerspectiveCamera(
   50, window.innerWidth / window.innerHeight, 0.01, 5000
@@ -363,7 +409,21 @@ scene.add(fillLight);
 
 // Controls
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = false;
+controls.enableDamping = true;
+controls.dampingFactor = 0.18; // light damping — smooths motion but stops almost immediately, no long slide
+controls.autoRotate = false;
+controls.autoRotateSpeed = 0;
+controls.rotateSpeed = 0.9;
+controls.zoomSpeed = 0.8;
+controls.panSpeed = 0.8;
+controls.enablePan = true;
+controls.screenSpacePanning = true;
+controls.minDistance = 0.05;
+controls.maxDistance = 500;
+controls.touches = {
+  ONE: THREE.TOUCH.ROTATE,
+  TWO: THREE.TOUCH.DOLLY_PAN
+};
 
 let currentModel = null;
 let currentFileName = '';
@@ -459,6 +519,18 @@ function addMeshToScene(mesh) {
   frameModel(mesh);
   document.getElementById('toolRow').style.display = 'flex';
   updateProperties(mesh, currentFileName, currentFileSize);
+
+  const printStatusEl = document.getElementById('printStatus');
+  const printResult = checkPrintability(mesh);
+  printStatusEl.textContent = printResult.label;
+  printStatusEl.className = printResult.status === 'printable' ? 'printable'
+    : printResult.status === 'not-printable' ? 'not-printable' : '';
+  printStatusEl.style.display = 'block';
+  if (printResult.status === 'unknown') {
+    printStatusEl.style.background = '#f0ece3';
+    printStatusEl.style.color = '#6b6a67';
+  }
+  updatePrintabilityIndicator(mesh);
 
   if (typeof viewCycleBtn !== 'undefined') {
     currentViewIndex = -1;
@@ -729,12 +801,32 @@ document.getElementById('sliceFlip').addEventListener('change', updateClipPlane)
 const FOSSIL_COLORS = [
   { name: 'Bone Tan', hex: 0xb89968 },
   { name: 'Limestone', hex: 0xe8dcc0 },
-  { name: 'Dark Grey', hex: 0x5a5a5a },
-  { name: 'Charcoal', hex: 0x2b2b2b },
   { name: 'Ivory', hex: 0xf3ecd8 },
-  { name: 'Rust', hex: 0x9c5a3c },
+  { name: 'Chalk White', hex: 0xf5f2ea },
+  { name: 'Sandstone', hex: 0xd9b871 },
+  { name: 'Desert Tan', hex: 0xc9a86a },
   { name: 'Amber', hex: 0xc98a3e },
-  { name: 'Slate Blue', hex: 0x5f6b7a }
+  { name: 'Honey', hex: 0xd9a441 },
+  { name: 'Rust', hex: 0x9c5a3c },
+  { name: 'Terracotta', hex: 0xb35a3a },
+  { name: 'Ochre', hex: 0xaa7a2e },
+  { name: 'Umber', hex: 0x7a5230 },
+  { name: 'Chocolate', hex: 0x5c3a24 },
+  { name: 'Dark Grey', hex: 0x5a5a5a },
+  { name: 'Slate Grey', hex: 0x6e7275 },
+  { name: 'Charcoal', hex: 0x2b2b2b },
+  { name: 'Jet Black', hex: 0x121212 },
+  { name: 'Slate Blue', hex: 0x5f6b7a },
+  { name: 'Basalt', hex: 0x3f4245 },
+  { name: 'Fossil Grey-Brown', hex: 0x7d6f5e },
+  { name: 'Petrified Green', hex: 0x6b7a5e },
+  { name: 'Malachite', hex: 0x3d7a5c },
+  { name: 'Copper Green', hex: 0x5c8a6e },
+  { name: 'Pyrite Gold', hex: 0xc9a227 },
+  { name: 'Opalized Blue', hex: 0x6f93a8 },
+  { name: 'Agate Rust', hex: 0x8a4b32 },
+  { name: 'Bone White', hex: 0xece4d4 },
+  { name: 'Ash Grey', hex: 0x9a968c }
 ];
 
 const colorSwatchesEl = document.getElementById('colorSwatches');
@@ -760,7 +852,143 @@ function applyModelColor(hex) {
   });
 }
 
+document.getElementById('customColorPicker').addEventListener('input', (e) => {
+  document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
+  const hex = parseInt(e.target.value.replace('#', ''), 16);
+  applyModelColor(hex);
+});
+
 // ---------- PROPERTIES FEATURE ----------
+// ---------- PRINTABILITY CHECK ----------
+// A mesh is "3D-print-safe" (manifold/watertight) when every triangle edge
+// is shared by exactly two triangles. Holes or non-manifold edges mean the
+// shape isn't a fully sealed solid, which most slicers will reject or fix incorrectly.
+function checkPrintability(mesh) {
+  const edgeMap = new Map();
+  let totalTriangles = 0;
+  let hasNonIndexedGeometry = false;
+
+  mesh.traverse((child) => {
+    if (!child.isMesh || !child.geometry) return;
+    const geo = child.geometry;
+    const pos = geo.attributes.position;
+    if (!pos) return;
+
+    if (!geo.index) {
+      hasNonIndexedGeometry = true;
+      return;
+    }
+
+    const idx = geo.index.array;
+    totalTriangles += idx.length / 3;
+
+    // Sample cap to keep this fast on huge scans (millions of faces)
+    const maxTrianglesToCheck = 200000;
+    const step = idx.length / 3 > maxTrianglesToCheck
+      ? Math.ceil((idx.length / 3) / maxTrianglesToCheck)
+      : 1;
+
+    for (let i = 0; i < idx.length; i += 3 * step) {
+      const a = idx[i], b = idx[i + 1], c = idx[i + 2];
+      if (a === undefined || b === undefined || c === undefined) continue;
+      [[a, b], [b, c], [c, a]].forEach(([v1, v2]) => {
+        const key = v1 < v2 ? v1 + '_' + v2 : v2 + '_' + v1;
+        edgeMap.set(key, (edgeMap.get(key) || 0) + 1);
+      });
+    }
+  });
+
+  if (hasNonIndexedGeometry && totalTriangles === 0) {
+    return { printable: false, reason: 'Mesh format not analyzable (no face index data).' };
+  }
+
+  let badEdges = 0;
+  edgeMap.forEach((count) => {
+    if (count !== 2) badEdges++;
+  });
+
+  const total = edgeMap.size || 1;
+  const badRatio = badEdges / total;
+
+  if (badRatio < 0.01) {
+    return { printable: true, reason: 'Mesh appears watertight (closed surface).' };
+  } else {
+    return { printable: false, reason: 'Mesh has open edges or gaps (' + (badRatio * 100).toFixed(1) + '% irregular) — likely needs repair before printing.' };
+  }
+}
+
+function updatePrintabilityIndicator(mesh) {
+  const el = document.getElementById('printability');
+  try {
+    const result = checkPrintability(mesh);
+    el.style.display = 'block';
+    el.className = result.printable ? 'printable' : 'not-printable';
+    el.textContent = (result.printable ? '✓ 3D-printable — ' : '✕ Not print-ready — ') + result.reason;
+  } catch (err) {
+    el.style.display = 'block';
+    el.className = 'not-printable';
+    el.textContent = 'Could not determine printability for this file.';
+  }
+}
+
+// Checks if a mesh is "watertight" (closed, no holes) — a rough proxy for 3D-printability.
+// Every edge in a fully closed mesh should be shared by exactly 2 triangles.
+// This is a heuristic check, not a full manifold/print-readiness validator.
+function checkPrintability(object) {
+  let totalTris = 0;
+  let hasNonIndexed = false;
+  let openEdges = 0;
+
+  object.traverse((child) => {
+    if (!child.isMesh || !child.geometry) return;
+    const geo = child.geometry;
+    const pos = geo.attributes.position;
+    if (!pos) return;
+
+    // Only run the full edge check on reasonably sized meshes — very large
+    // scans (millions of faces) would be too slow to check on a phone.
+    const triCount = geo.index ? geo.index.count / 3 : pos.count / 3;
+    totalTris += triCount;
+
+    if (!geo.index) {
+      hasNonIndexed = true;
+      return;
+    }
+
+    if (triCount > 300000) return; // skip edge-check for huge meshes, too slow on mobile
+
+    const edgeMap = new Map();
+    const idx = geo.index.array;
+
+    function edgeKey(a, b) {
+      return a < b ? a + '_' + b : b + '_' + a;
+    }
+
+    for (let i = 0; i < idx.length; i += 3) {
+      const a = idx[i], b = idx[i + 1], c = idx[i + 2];
+      [[a, b], [b, c], [c, a]].forEach(([x, y]) => {
+        const key = edgeKey(x, y);
+        edgeMap.set(key, (edgeMap.get(key) || 0) + 1);
+      });
+    }
+
+    edgeMap.forEach((count) => {
+      if (count !== 2) openEdges++;
+    });
+  });
+
+  if (totalTris > 300000) {
+    return { status: 'unknown', label: 'Too complex to check on this device' };
+  }
+  if (hasNonIndexed) {
+    return { status: 'unknown', label: 'Could not fully verify (unsupported mesh format)' };
+  }
+  if (openEdges === 0 && totalTris > 0) {
+    return { status: 'printable', label: '✓ Likely 3D-printable (closed surface)' };
+  }
+  return { status: 'not-printable', label: '✗ Not print-ready (' + openEdges + ' open edges — surface has holes)' };
+}
+
 function updateProperties(mesh, fileName, fileSize) {
   let vertCount = 0;
   let faceCount = 0;
@@ -775,10 +1003,10 @@ function updateProperties(mesh, fileName, fileSize) {
     }
   });
 
-  const sizeKB = fileSize ? (fileSize / 1024).toFixed(1) + ' KB' : '—';
+  const sizeMB = fileSize ? (fileSize / (1024 * 1024)).toFixed(2) + ' MB' : '—';
   const rows = [
     ['File name', fileName || '—'],
-    ['File size', sizeKB],
+    ['File size', sizeMB],
     ['Vertices', vertCount.toLocaleString()],
     ['Faces', Math.round(faceCount).toLocaleString()],
     ['Width (X)', size.x.toFixed(3)],
@@ -827,6 +1055,33 @@ document.getElementById('propsBtn').addEventListener('click', () => togglePanel(
 document.querySelectorAll('.panel-close').forEach((btn) => {
   btn.addEventListener('click', () => closeAllPanels());
 });
+
+// ---------- FULL VIEW MODE (hide all UI) ----------
+let isFullView = false;
+const fullscreenBtn = document.getElementById('fullscreenBtn');
+const topbarEl = document.getElementById('topbar');
+const hintEl = document.getElementById('hint');
+const printabilityEl = document.getElementById('printStatus');
+
+const exitFullViewBtn = document.createElement('button');
+exitFullViewBtn.textContent = '✕';
+exitFullViewBtn.id = 'exitFullViewBtn';
+exitFullViewBtn.style.cssText = 'position:fixed; top:14px; right:14px; z-index:30; width:38px; height:38px; border-radius:50%; background:rgba(0,0,0,0.55); color:#fff; border:none; font-size:16px; display:none;';
+document.body.appendChild(exitFullViewBtn);
+
+function toggleFullView(forceOff) {
+  isFullView = forceOff ? false : !isFullView;
+  closeAllPanels();
+  topbarEl.style.display = isFullView ? 'none' : 'block';
+  hintEl.style.display = isFullView ? 'none' : 'block';
+  printabilityEl.style.display = isFullView ? 'none' : (currentModel ? 'block' : 'none');
+  exitFullViewBtn.style.display = isFullView ? 'flex' : 'none';
+  exitFullViewBtn.style.alignItems = 'center';
+  exitFullViewBtn.style.justifyContent = 'center';
+}
+
+fullscreenBtn.addEventListener('click', () => toggleFullView());
+exitFullViewBtn.addEventListener('click', () => toggleFullView(true));
 
 function setStatus(text) {
   statusEl.textContent = text;
@@ -977,6 +1232,13 @@ if ('serviceWorker' in navigator) {
     }).catch((err) => {
       console.warn('Service worker registration failed:', err);
     });
+  });
+}
+
+// Try to lock orientation to portrait (only works when installed as standalone app)
+if (screen.orientation && screen.orientation.lock) {
+  screen.orientation.lock('portrait').catch(() => {
+    // Locking isn't allowed in a regular browser tab — only works when installed.
   });
 }
 </script>
