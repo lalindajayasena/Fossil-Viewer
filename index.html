@@ -90,6 +90,10 @@
   <label for="fileInput" class="btn">Load Fossil File</label>
   <input type="file" id="fileInput" accept=".stl,.obj,.ply,.glb,.gltf">
   <div id="status">No file loaded. Supports STL, OBJ, PLY, GLB.</div>
+  <div id="flipControls" style="margin-top:8px; display:none;">
+    <button class="btn" id="flipXBtn" style="margin-right:6px;">Flip ↔</button>
+    <button class="btn" id="flipYBtn">Flip ↕</button>
+  </div>
 </div>
 
 <div id="loading">Loading model...</div>
@@ -127,7 +131,7 @@ const camera = new THREE.PerspectiveCamera(
 camera.position.set(0, 0, 5);
 
 // Light attached to camera so the model is always lit, no matter how it's rotated
-const cameraLight = new THREE.PointLight(0xffffff, 1.5, 0, 0.5);
+const cameraLight = new THREE.PointLight(0xffffff, 3.5, 0, 0.3);
 camera.add(cameraLight);
 scene.add(camera);
 
@@ -242,7 +246,23 @@ function addMeshToScene(mesh) {
   currentModel = mesh;
   scene.add(mesh);
   frameModel(mesh);
+  document.getElementById('flipControls').style.display = 'block';
 }
+
+const flipXBtn = document.getElementById('flipXBtn');
+const flipYBtn = document.getElementById('flipYBtn');
+
+flipXBtn.addEventListener('click', () => {
+  if (currentModel) {
+    currentModel.rotation.y += Math.PI;
+  }
+});
+
+flipYBtn.addEventListener('click', () => {
+  if (currentModel) {
+    currentModel.rotation.x += Math.PI;
+  }
+});
 
 function setStatus(text) {
   statusEl.textContent = text;
