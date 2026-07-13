@@ -578,27 +578,39 @@ function openDescDB() {
   });
 }
 
-openDescDB().then((db) => { descDB = db; }).catch((err) => {
+// Shared promise every save/get call waits on, so a save attempted before
+// the database finishes opening no longer silently fails.
+const descDBReady = openDescDB().then((db) => {
+  descDB = db;
+  return db;
+}).catch((err) => {
   console.warn('Could not open description storage:', err);
+  return null;
 });
 
 function saveDescription(fileName, text) {
-  if (!descDB || !fileName) return Promise.resolve();
-  return new Promise((resolve) => {
-    const tx = descDB.transaction(DESC_STORE_NAME, 'readwrite');
-    tx.objectStore(DESC_STORE_NAME).put({ fileName, text, savedAt: Date.now() });
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => resolve();
+  if (!fileName) return Promise.resolve(false);
+  return descDBReady.then((db) => {
+    if (!db) return false;
+    return new Promise((resolve) => {
+      const tx = db.transaction(DESC_STORE_NAME, 'readwrite');
+      tx.objectStore(DESC_STORE_NAME).put({ fileName, text, savedAt: Date.now() });
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(false);
+    });
   });
 }
 
 function getDescription(fileName) {
-  if (!descDB || !fileName) return Promise.resolve('');
-  return new Promise((resolve) => {
-    const tx = descDB.transaction(DESC_STORE_NAME, 'readonly');
-    const req = tx.objectStore(DESC_STORE_NAME).get(fileName);
-    req.onsuccess = () => resolve(req.result ? req.result.text : '');
-    req.onerror = () => resolve('');
+  if (!fileName) return Promise.resolve('');
+  return descDBReady.then((db) => {
+    if (!db) return '';
+    return new Promise((resolve) => {
+      const tx = db.transaction(DESC_STORE_NAME, 'readonly');
+      const req = tx.objectStore(DESC_STORE_NAME).get(fileName);
+      req.onsuccess = () => resolve(req.result ? req.result.text : '');
+      req.onerror = () => resolve('');
+    });
   });
 }
 
@@ -624,8 +636,13 @@ document.getElementById('descSaveBtn').addEventListener('click', () => {
     noteEl.textContent = 'Load a fossil file first.';
     return;
   }
-  saveDescription(currentFileName, textEl.value).then(() => {
-    noteEl.textContent = 'Saved ✓ — this will reappear next time you load "' + currentFileName + '".';
+  noteEl.textContent = 'Saving...';
+  saveDescription(currentFileName, textEl.value).then((success) => {
+    if (success) {
+      noteEl.textContent = 'Saved ✓ — this will reappear next time you load "' + currentFileName + '".';
+    } else {
+      noteEl.textContent = 'Could not save — storage may be unavailable on this device/browser.';
+    }
     refreshReadDescButton();
   });
 });
