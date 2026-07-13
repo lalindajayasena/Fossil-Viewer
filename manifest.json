@@ -1,6 +1,6 @@
 {
-  "name": "LDJ Viewer",
-  "short_name": "LDJ Viewer",
+  "name": "LDJ 3D Viewer",
+  "short_name": "LDJ 3D Viewer",
   "description": "A 3D fossil viewer for STL, OBJ, PLY, and GLB files.",
   "start_url": "./index.html",
   "display": "standalone",
