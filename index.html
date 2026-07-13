@@ -229,25 +229,39 @@
     color: #262524;
     margin-top: 8px;
     min-height: 20px;
-  }  #printability {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    padding: 8px 14px;
-    box-sizing: border-box;
-    font-size: 12px;
-    font-weight: 600;
+  }
+  #printability {
+    display: none;
+  }
+  .reorder-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 4px;
+    border-bottom: 1px solid #f0ece3;
+  }
+  .reorder-row .reorder-icon {
+    width: 32px;
     text-align: center;
-    z-index: 12;
+    font-size: 16px;
   }
-  #printability.printable {
-    background: #e6f4ea;
-    color: #1e7b34;
+  .reorder-row .reorder-name {
+    flex: 1;
+    font-size: 13.5px;
+    color: #3a372f;
   }
-  #printability.not-printable {
-    background: #fdeaea;
-    color: #b3261e;
+  .reorder-arrow {
+    background: #f0ece3;
+    border: 1px solid #ddd6c6;
+    border-radius: 6px;
+    width: 30px;
+    height: 30px;
+    font-size: 14px;
+    color: #3a372f;
+    cursor: pointer;
+  }
+  .reorder-arrow:disabled {
+    opacity: 0.3;
   }
 </style>
 </head>
@@ -273,6 +287,9 @@
     <button class="btn-icon" id="sliceBtn" title="Slice view">◐</button>
     <button class="btn-icon" id="colorBtn" title="Change color">🎨</button>
     <button class="btn-icon" id="propsBtn" title="Properties">ℹ</button>
+    <button class="btn-icon" id="descBtn" title="Description">📝</button>
+    <button class="btn-icon" id="customizeBtn" title="Customize toolbar">⚙</button>
+    <button class="btn-icon" id="scaleBtn" title="Set real-world scale">📐</button>
     <button class="btn-icon" id="fullscreenBtn" title="Full view">⛶</button>
   </div>
 </div>
@@ -325,10 +342,44 @@
   <table id="propsTable"></table>
 </div>
 
+<!-- Description panel -->
+<div class="panel" id="descPanel">
+  <div class="panel-title">Description <button class="panel-close" data-close="descPanel">✕</button></div>
+  <textarea id="descText" placeholder="Write notes about this fossil — species, locality, age, source, anything you want to remember." style="width:100%; min-height:120px; box-sizing:border-box; padding:10px; border-radius:8px; border:1px solid #ddd6c6; font-family:inherit; font-size:14px; resize:vertical;"></textarea>
+  <button class="btn" id="descSaveBtn" style="margin-top:10px;">Save Description</button>
+  <div id="descSavedNote" style="font-size:12px; color:#6b6a67; margin-top:6px;"></div>
+</div>
+
+<!-- Customize toolbar panel -->
+<div class="panel" id="customizePanel">
+  <div class="panel-title">Customize Toolbar Order <button class="panel-close" data-close="customizePanel">✕</button></div>
+  <div style="font-size:12.5px; color:#6b6a67; margin-bottom:10px;">Use the arrows to move a button earlier or later in the toolbar.</div>
+  <div id="customizeList"></div>
+</div>
+
+<!-- Real-world scale panel -->
+<div class="panel" id="scalePanel">
+  <div class="panel-title">Set Real-World Scale <button class="panel-close" data-close="scalePanel">✕</button></div>
+  <div style="font-size:12.5px; color:#6b6a67; margin-bottom:10px;">
+    If you know the true size of this fossil, enter it here. Use Measure first to select two points, then enter what that distance actually is in real life — every future measurement on this file will be corrected to match.
+  </div>
+  <div class="slider-row">
+    <span class="slider-label">Real distance</span>
+    <input type="number" id="realDistanceInput" placeholder="e.g. 300" style="flex:1; padding:8px; border-radius:6px; border:1px solid #ddd6c6;">
+    <select id="realDistanceUnit" style="padding:8px; border-radius:6px; border:1px solid #ddd6c6;">
+      <option value="mm">mm</option>
+      <option value="cm" selected>cm</option>
+      <option value="m">m</option>
+      <option value="in">in</option>
+    </select>
+  </div>
+  <button class="btn" id="applyScaleBtn" style="margin-top:10px;">Apply Scale</button>
+  <div id="scaleStatus" style="font-size:12px; color:#6b6a67; margin-top:8px;"></div>
+</div>
+
 <div id="loading">Loading model...</div>
 <div id="hint">Drag to rotate · Pinch to zoom · Double-tap to re-center</div>
 <div id="printStatus"></div>
-<div id="printability" style="display:none;"></div>
 
 <script type="importmap">
 {
@@ -426,6 +477,76 @@ controls.touches = {
 };
 
 let currentModel = null;
+
+// ---------- DESCRIPTION STORAGE (IndexedDB, works fully offline) ----------
+let descDB = null;
+const DESC_DB_NAME = 'fossilViewerDB';
+const DESC_STORE_NAME = 'descriptions';
+
+function openDescDB() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DESC_DB_NAME, 1);
+    request.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(DESC_STORE_NAME)) {
+        db.createObjectStore(DESC_STORE_NAME, { keyPath: 'fileName' });
+      }
+    };
+    request.onsuccess = (e) => resolve(e.target.result);
+    request.onerror = (e) => reject(e);
+  });
+}
+
+openDescDB().then((db) => { descDB = db; }).catch((err) => {
+  console.warn('Could not open description storage:', err);
+});
+
+function saveDescription(fileName, text) {
+  if (!descDB || !fileName) return Promise.resolve();
+  return new Promise((resolve) => {
+    const tx = descDB.transaction(DESC_STORE_NAME, 'readwrite');
+    tx.objectStore(DESC_STORE_NAME).put({ fileName, text, savedAt: Date.now() });
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => resolve();
+  });
+}
+
+function getDescription(fileName) {
+  if (!descDB || !fileName) return Promise.resolve('');
+  return new Promise((resolve) => {
+    const tx = descDB.transaction(DESC_STORE_NAME, 'readonly');
+    const req = tx.objectStore(DESC_STORE_NAME).get(fileName);
+    req.onsuccess = () => resolve(req.result ? req.result.text : '');
+    req.onerror = () => resolve('');
+  });
+}
+
+function loadDescriptionForCurrentFile() {
+  const textEl = document.getElementById('descText');
+  const noteEl = document.getElementById('descSavedNote');
+  if (!currentFileName) {
+    textEl.value = '';
+    noteEl.textContent = 'Load a fossil file first.';
+    return;
+  }
+  noteEl.textContent = 'Loading...';
+  getDescription(currentFileName).then((text) => {
+    textEl.value = text || '';
+    noteEl.textContent = text ? 'Saved description found for this file.' : 'No description saved yet for this file.';
+  });
+}
+
+document.getElementById('descSaveBtn').addEventListener('click', () => {
+  const textEl = document.getElementById('descText');
+  const noteEl = document.getElementById('descSavedNote');
+  if (!currentFileName) {
+    noteEl.textContent = 'Load a fossil file first.';
+    return;
+  }
+  saveDescription(currentFileName, textEl.value).then(() => {
+    noteEl.textContent = 'Saved ✓ — this will reappear next time you load "' + currentFileName + '".';
+  });
+});
 let currentFileName = '';
 let currentFileSize = 0;
 
@@ -685,6 +806,11 @@ let interactionMode = 'none';
 const raycaster = new THREE.Raycaster();
 const tapPos = new THREE.Vector2();
 let lastTapTime = 0;
+let lastTapX = 0;
+let lastTapY = 0;
+let touchStartX = 0;
+let touchStartY = 0;
+let touchMoved = false;
 
 function getModelPointFromTap(clientX, clientY) {
   if (!currentModel) return null;
@@ -704,14 +830,45 @@ function handleDoubleTap(clientX, clientY) {
   }
 }
 
+renderer.domElement.addEventListener('touchstart', (e) => {
+  if (e.touches.length === 1) {
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+    touchMoved = false;
+  }
+});
+
+renderer.domElement.addEventListener('touchmove', (e) => {
+  if (e.touches.length === 1) {
+    const dx = e.touches[0].clientX - touchStartX;
+    const dy = e.touches[0].clientY - touchStartY;
+    // If the finger has moved more than a few pixels, this is a drag, not a tap.
+    if (Math.sqrt(dx * dx + dy * dy) > 12) {
+      touchMoved = true;
+    }
+  }
+});
+
 renderer.domElement.addEventListener('touchend', (e) => {
   if (interactionMode === 'measure') return; // measure uses single taps instead
+  if (touchMoved) return; // this was a drag/rotate gesture, not a tap — ignore
+  if (e.changedTouches.length === 0) return;
+
+  const touch = e.changedTouches[0];
   const now = Date.now();
-  if (now - lastTapTime < 300 && e.changedTouches.length > 0) {
-    const touch = e.changedTouches[0];
+  const dx = touch.clientX - lastTapX;
+  const dy = touch.clientY - lastTapY;
+  const distFromLastTap = Math.sqrt(dx * dx + dy * dy);
+
+  // Require two quick taps close together in both time AND position
+  if (now - lastTapTime < 300 && distFromLastTap < 25) {
     handleDoubleTap(touch.clientX, touch.clientY);
+    lastTapTime = 0; // reset so a third quick tap doesn't immediately re-trigger
+  } else {
+    lastTapTime = now;
+    lastTapX = touch.clientX;
+    lastTapY = touch.clientY;
   }
-  lastTapTime = now;
 });
 
 renderer.domElement.addEventListener('dblclick', (e) => {
@@ -721,6 +878,7 @@ renderer.domElement.addEventListener('dblclick', (e) => {
 
 // ---------- MEASURE FEATURE ----------
 let measurePoints = [];
+let lastMeasuredFileUnitDist = 0;
 let measureMarkers = [];
 let measureLine = null;
 const measureResultEl = document.getElementById('measureResult');
@@ -746,8 +904,17 @@ function addMeasurePoint(point) {
     const [a, b] = measurePoints;
     const dist = a.distanceTo(b);
     const scaleFactor = currentModel && currentModel.userData.appliedScale ? currentModel.userData.appliedScale : 1;
-    const realDist = dist / scaleFactor;
-    measureResultEl.textContent = 'Distance: ' + realDist.toFixed(2) + ' (file units, e.g. mm)';
+    const fileUnitDist = dist / scaleFactor;
+
+    const calibration = currentModel && currentModel.userData.realWorldMmPerFileUnit;
+    lastMeasuredFileUnitDist = fileUnitDist;
+
+    if (calibration) {
+      const realMm = fileUnitDist * calibration;
+      measureResultEl.textContent = 'Distance: ' + formatRealWorldDistance(realMm);
+    } else {
+      measureResultEl.textContent = 'Distance: ' + fileUnitDist.toFixed(2) + ' file units (real-world scale not set — tap 📐 to set it)';
+    }
 
     const geo = new THREE.BufferGeometry().setFromPoints([a, b]);
     const mat = new THREE.LineBasicMaterial({ color: 0xe74c3c, linewidth: 2 });
@@ -757,6 +924,12 @@ function addMeasurePoint(point) {
     clearMeasurement();
     addMeasurePoint(point);
   }
+}
+
+function formatRealWorldDistance(mm) {
+  if (mm >= 1000) return (mm / 1000).toFixed(3) + ' m';
+  if (mm >= 10) return (mm / 10).toFixed(2) + ' cm';
+  return mm.toFixed(1) + ' mm';
 }
 
 renderer.domElement.addEventListener('click', (e) => {
@@ -958,7 +1131,10 @@ const panels = {
   measurePanel: document.getElementById('measurePanel'),
   slicePanel: document.getElementById('slicePanel'),
   colorPanel: document.getElementById('colorPanel'),
-  propsPanel: document.getElementById('propsPanel')
+  propsPanel: document.getElementById('propsPanel'),
+  descPanel: document.getElementById('descPanel'),
+  customizePanel: document.getElementById('customizePanel'),
+  scalePanel: document.getElementById('scalePanel')
 };
 
 function closeAllPanels() {
@@ -967,6 +1143,9 @@ function closeAllPanels() {
   document.getElementById('sliceBtn').classList.remove('active');
   document.getElementById('colorBtn').classList.remove('active');
   document.getElementById('propsBtn').classList.remove('active');
+  document.getElementById('descBtn').classList.remove('active');
+  document.getElementById('customizeBtn').classList.remove('active');
+  document.getElementById('scaleBtn').classList.remove('active');
   interactionMode = 'none';
 }
 
@@ -984,6 +1163,148 @@ document.getElementById('measureBtn').addEventListener('click', () => togglePane
 document.getElementById('sliceBtn').addEventListener('click', () => togglePanel('slicePanel', 'sliceBtn'));
 document.getElementById('colorBtn').addEventListener('click', () => togglePanel('colorPanel', 'colorBtn'));
 document.getElementById('propsBtn').addEventListener('click', () => togglePanel('propsPanel', 'propsBtn'));
+document.getElementById('descBtn').addEventListener('click', () => {
+  togglePanel('descPanel', 'descBtn');
+  loadDescriptionForCurrentFile();
+});
+
+// ---------- TOOLBAR CUSTOMIZATION ----------
+const TOOLBAR_ORDER_KEY = 'fossilViewerToolbarOrder';
+const toolRowEl = document.getElementById('toolRow');
+
+const BUTTON_LABELS = {
+  flipXBtn: 'Flip Horizontal',
+  flipYBtn: 'Flip Vertical',
+  resetBtn: 'Reset View',
+  viewCycleBtn: 'Cycle Views',
+  measureBtn: 'Measure Distance',
+  sliceBtn: 'Slice View',
+  colorBtn: 'Change Color',
+  propsBtn: 'Properties',
+  descBtn: 'Description',
+  customizeBtn: 'Customize Toolbar',
+  scaleBtn: 'Set Real-World Scale'
+};
+
+function getCurrentToolbarOrder() {
+  return Array.from(toolRowEl.children).map(el => el.id);
+}
+
+function applyToolbarOrder(order) {
+  order.forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) toolRowEl.appendChild(el);
+  });
+}
+
+function saveToolbarOrder() {
+  const order = getCurrentToolbarOrder();
+  try {
+    localStorage.setItem(TOOLBAR_ORDER_KEY, JSON.stringify(order));
+  } catch (e) { /* ignore storage errors */ }
+}
+
+function loadSavedToolbarOrder() {
+  try {
+    const saved = localStorage.getItem(TOOLBAR_ORDER_KEY);
+    if (saved) {
+      const order = JSON.parse(saved);
+      applyToolbarOrder(order);
+    }
+  } catch (e) { /* ignore, keep default order */ }
+}
+
+function renderCustomizeList() {
+  const listEl = document.getElementById('customizeList');
+  const order = getCurrentToolbarOrder();
+  listEl.innerHTML = '';
+
+  order.forEach((id, index) => {
+    const row = document.createElement('div');
+    row.className = 'reorder-row';
+
+    const icon = document.createElement('div');
+    icon.className = 'reorder-icon';
+    const btnEl = document.getElementById(id);
+    icon.textContent = btnEl ? btnEl.textContent : '';
+
+    const name = document.createElement('div');
+    name.className = 'reorder-name';
+    name.textContent = BUTTON_LABELS[id] || id;
+
+    const leftBtn = document.createElement('button');
+    leftBtn.className = 'reorder-arrow';
+    leftBtn.textContent = '◀';
+    leftBtn.disabled = index === 0;
+    leftBtn.addEventListener('click', () => moveButton(index, index - 1));
+
+    const rightBtn = document.createElement('button');
+    rightBtn.className = 'reorder-arrow';
+    rightBtn.textContent = '▶';
+    rightBtn.disabled = index === order.length - 1;
+    rightBtn.addEventListener('click', () => moveButton(index, index + 1));
+
+    row.appendChild(icon);
+    row.appendChild(name);
+    row.appendChild(leftBtn);
+    row.appendChild(rightBtn);
+    listEl.appendChild(row);
+  });
+}
+
+function moveButton(fromIndex, toIndex) {
+  const order = getCurrentToolbarOrder();
+  const [moved] = order.splice(fromIndex, 1);
+  order.splice(toIndex, 0, moved);
+  applyToolbarOrder(order);
+  saveToolbarOrder();
+  renderCustomizeList();
+}
+
+document.getElementById('customizeBtn').addEventListener('click', () => {
+  togglePanel('customizePanel', 'customizeBtn');
+  renderCustomizeList();
+});
+
+// Apply any previously saved toolbar order on load
+loadSavedToolbarOrder();
+
+// ---------- REAL-WORLD SCALE CALIBRATION ----------
+document.getElementById('scaleBtn').addEventListener('click', () => {
+  togglePanel('scalePanel', 'scaleBtn');
+  const statusEl = document.getElementById('scaleStatus');
+  if (lastMeasuredFileUnitDist > 0) {
+    statusEl.textContent = 'Using your last Measure selection (' + lastMeasuredFileUnitDist.toFixed(3) + ' file units) as the reference distance.';
+  } else {
+    statusEl.textContent = 'Tip: use the 📏 Measure tool first to select two points on a feature with a known real-world size, then come back here.';
+  }
+});
+
+document.getElementById('applyScaleBtn').addEventListener('click', () => {
+  const statusEl = document.getElementById('scaleStatus');
+  const valueInput = parseFloat(document.getElementById('realDistanceInput').value);
+  const unit = document.getElementById('realDistanceUnit').value;
+
+  if (!currentModel) {
+    statusEl.textContent = 'Load a fossil file first.';
+    return;
+  }
+  if (!lastMeasuredFileUnitDist || lastMeasuredFileUnitDist <= 0) {
+    statusEl.textContent = 'Please use the 📏 Measure tool first to select two reference points.';
+    return;
+  }
+  if (!valueInput || valueInput <= 0) {
+    statusEl.textContent = 'Enter a valid positive number for the real-world distance.';
+    return;
+  }
+
+  const unitToMm = { mm: 1, cm: 10, m: 1000, in: 25.4 };
+  const realMm = valueInput * unitToMm[unit];
+  const mmPerFileUnit = realMm / lastMeasuredFileUnitDist;
+
+  currentModel.userData.realWorldMmPerFileUnit = mmPerFileUnit;
+  statusEl.textContent = 'Scale applied ✓ — future measurements on this file will show real-world size.';
+});
 
 document.querySelectorAll('.panel-close').forEach((btn) => {
   btn.addEventListener('click', () => closeAllPanels());
