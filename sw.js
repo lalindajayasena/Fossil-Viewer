@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fossil-viewer-v12';
+const CACHE_NAME = 'fossil-viewer-v13';
 
 const URLS_TO_CACHE = [
   './',
@@ -36,13 +36,34 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  const url = event.request.url;
+  const isAppShell = url.endsWith('/') || url.endsWith('index.html') || url.endsWith('manifest.json') || url.endsWith('sw.js');
+
+  if (isAppShell) {
+    // Network-first for the app's own files, so updates always take effect
+    // immediately instead of being stuck behind an old cached copy.
+    event.respondWith(
+      fetch(event.request).then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200) {
+          const clone = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        }
+        return networkResponse;
+      }).catch(() => {
+        // Offline — fall back to whatever was last cached
+        return caches.match(event.request);
+      })
+    );
+    return;
+  }
+
+  // Cache-first for large static libraries (Three.js etc.) that never change per-version
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
         return cachedResponse;
       }
       return fetch(event.request).then((networkResponse) => {
-        // Cache new same-origin or CDN assets as we go
         if (networkResponse && networkResponse.status === 200) {
           const responseClone = networkResponse.clone();
           caches.open(CACHE_NAME).then((cache) => {
@@ -51,7 +72,6 @@ self.addEventListener('fetch', (event) => {
         }
         return networkResponse;
       }).catch(() => {
-        // Offline and not cached — nothing more we can do for this request
         return new Response('Offline and resource not cached.', {
           status: 503,
           statusText: 'Offline'
