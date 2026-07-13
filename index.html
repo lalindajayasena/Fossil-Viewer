@@ -783,6 +783,10 @@ function addMeshToScene(mesh) {
     viewCycleBtn.textContent = '⬤';
     viewCycleBtn.title = 'Front view';
   }
+
+  if (typeof refreshReadDescButton === 'function') {
+    refreshReadDescButton();
+  }
 }
 
 // Detects which side of a thin slab has more surface detail (the fossil face)
