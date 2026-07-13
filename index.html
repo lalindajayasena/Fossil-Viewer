@@ -208,6 +208,130 @@
     color: #9a988f;
     font-style: italic;
   }
+  .panel {
+    position: fixed;
+    left: 14px;
+    right: 14px;
+    bottom: 14px;
+    background: #ffffff;
+    border: 1px solid #e4ddcb;
+    border-radius: 14px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.15);
+    padding: 14px;
+    box-sizing: border-box;
+    z-index: 25;
+    display: none;
+    max-height: 50vh;
+    overflow-y: auto;
+  }
+  .panel.open {
+    display: block;
+  }
+  .panel-title {
+    font-size: 14.5px;
+    font-weight: 700;
+    color: #262524;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .panel-close {
+    background: #ece7db;
+    border: none;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    font-size: 14px;
+    color: #3a372f;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .color-swatch-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .color-swatch {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 2px solid #ddd6c6;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .color-swatch.selected {
+    border-color: #262524;
+    border-width: 3px;
+  }
+  .slider-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 8px;
+  }
+  .slider-row input[type=range] {
+    flex: 1;
+  }
+  .slider-label {
+    font-size: 12px;
+    color: #6b6a67;
+    min-width: 70px;
+    flex-shrink: 0;
+  }
+  #propsTable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  #propsTable td {
+    padding: 6px 4px;
+    border-bottom: 1px solid #f0ece3;
+    color: #3a372f;
+  }
+  #propsTable td:first-child {
+    color: #8a8a86;
+    width: 45%;
+  }
+  #measureResult {
+    font-size: 14px;
+    font-weight: 600;
+    color: #262524;
+    margin-top: 8px;
+    min-height: 20px;
+  }
+  .reorder-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 4px;
+    border-bottom: 1px solid #f0ece3;
+  }
+  .reorder-icon {
+    width: 32px;
+    text-align: center;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+  .reorder-name {
+    flex: 1;
+    font-size: 13.5px;
+    color: #3a372f;
+  }
+  .reorder-arrow {
+    background: #f0ece3;
+    border: 1px solid #ddd6c6;
+    border-radius: 6px;
+    width: 30px;
+    height: 30px;
+    font-size: 14px;
+    color: #3a372f;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .reorder-arrow:disabled {
+    opacity: 0.3;
+  }
 </style>
 </head>
 <body>
