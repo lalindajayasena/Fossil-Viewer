@@ -450,6 +450,7 @@
     <button class="btn-icon" id="descBtn" title="Description">📝</button>
     <button class="btn-icon" id="customizeBtn" title="Customize toolbar">⚙</button>
     <button class="btn-icon" id="scaleBtn" title="Set real-world scale">📐</button>
+    <button class="btn-icon" id="invertRotateBtn" title="Flip rotation direction">⇄</button>
     <button class="btn-icon" id="fullscreenBtn" title="Full view">⛶</button>
   </div>
 </div>
@@ -684,6 +685,31 @@ let lastDragY = 0;
 let shadowResumeTimer = null;
 const ROTATE_SENSITIVITY = 0.008;
 
+// Rotation direction, user-adjustable — flip with the ⇅ toolbar button if
+// dragging still feels backwards on either axis. Saved so the choice sticks.
+let verticalRotateInverted = true;
+let horizontalRotateInverted = true;
+try {
+  const savedV = localStorage.getItem('ldjVerticalRotateInverted');
+  verticalRotateInverted = savedV === null ? true : savedV === 'true';
+  const savedH = localStorage.getItem('ldjHorizontalRotateInverted');
+  horizontalRotateInverted = savedH === null ? true : savedH === 'true';
+} catch (e) { /* defaults already set above */ }
+
+function toggleVerticalRotateDirection() {
+  verticalRotateInverted = !verticalRotateInverted;
+  try {
+    localStorage.setItem('ldjVerticalRotateInverted', verticalRotateInverted ? 'true' : 'false');
+  } catch (e) { /* ignore storage errors */ }
+}
+
+function toggleHorizontalRotateDirection() {
+  horizontalRotateInverted = !horizontalRotateInverted;
+  try {
+    localStorage.setItem('ldjHorizontalRotateInverted', horizontalRotateInverted ? 'true' : 'false');
+  } catch (e) { /* ignore storage errors */ }
+}
+
 function getSphericalFromCamera() {
   const offset = new THREE.Vector3().subVectors(camera.position, controls.target);
   return new THREE.Spherical().setFromVector3(offset);
@@ -698,11 +724,10 @@ function applySphericalToCamera(spherical) {
 
 function handleDragRotate(dx, dy) {
   const spherical = getSphericalFromCamera();
-  // Horizontal drag: natural direction (drag right -> orbit right)
-  spherical.theta -= dx * ROTATE_SENSITIVITY;
-  // Vertical drag: dragging up moves the camera up and over the top of the
-  // model (matching the finger), dragging down moves it under.
-  spherical.phi += dy * ROTATE_SENSITIVITY;
+  const horizontalSign = horizontalRotateInverted ? 1 : -1;
+  spherical.theta += dx * ROTATE_SENSITIVITY * horizontalSign;
+  const verticalSign = verticalRotateInverted ? -1 : 1;
+  spherical.phi += dy * ROTATE_SENSITIVITY * verticalSign;
   applySphericalToCamera(spherical);
 
   // Temporarily disable expensive shadow recalculation while actively
@@ -1629,7 +1654,8 @@ const BUTTON_LABELS = {
   propsBtn: 'Properties',
   descBtn: 'Description',
   customizeBtn: 'Customize Toolbar',
-  scaleBtn: 'Set Real-World Scale'
+  scaleBtn: 'Set Real-World Scale',
+  invertRotateBtn: 'Flip Rotation Direction'
 };
 
 function getCurrentToolbarOrder() {
@@ -1754,6 +1780,22 @@ document.getElementById('applyScaleBtn').addEventListener('click', () => {
 
 document.querySelectorAll('.panel-close').forEach((btn) => {
   btn.addEventListener('click', () => closeAllPanels());
+});
+
+// ---------- ROTATION DIRECTION TOGGLE (both axes) ----------
+const invertRotateBtn = document.getElementById('invertRotateBtn');
+function updateInvertRotateBtnLabel() {
+  invertRotateBtn.classList.toggle('active', verticalRotateInverted || horizontalRotateInverted);
+}
+updateInvertRotateBtnLabel();
+
+invertRotateBtn.addEventListener('click', () => {
+  toggleVerticalRotateDirection();
+  toggleHorizontalRotateDirection();
+  updateInvertRotateBtnLabel();
+  setStatus(verticalRotateInverted
+    ? 'Rotation direction flipped.'
+    : 'Rotation direction back to default.');
 });
 
 // ---------- FULL VIEW MODE (hide all UI) ----------
