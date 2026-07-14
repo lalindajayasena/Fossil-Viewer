@@ -5,15 +5,58 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>LDJ 3D Viewer</title>
 <link rel="manifest" href="./manifest.json">
-<meta name="theme-color" content="#f2efe9">
+<meta name="theme-color" content="#f2efe9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1c1b19" media="(prefers-color-scheme: dark)">
 <style>
+  :root {
+    --bg: #f2efe9;
+    --panel-bg: #ffffff;
+    --panel-border: #e4ddcb;
+    --text-primary: #262524;
+    --text-secondary: #6b6a67;
+    --text-muted: #8a8a86;
+    --icon-bg: #f0ece3;
+    --icon-border: #ddd6c6;
+    --icon-text: #3a372f;
+    --icon-active-bg: #caa45c;
+    --icon-active-text: #1a1a1a;
+    --icon-pressed-bg: #e2dbc9;
+    --accent: #caa45c;
+    --accent-dark: #b8944e;
+    --divider: #f0ece3;
+    --overlay-bg: #f2efe9;
+    --close-btn-bg: #ece7db;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1b19;
+      --panel-bg: #242320;
+      --panel-border: #3a382f;
+      --text-primary: #ece8dd;
+      --text-secondary: #b5b2a7;
+      --text-muted: #8f8c81;
+      --icon-bg: #2e2c27;
+      --icon-border: #423f35;
+      --icon-text: #ece8dd;
+      --icon-active-bg: #caa45c;
+      --icon-active-text: #1a1a1a;
+      --icon-pressed-bg: #3a3730;
+      --accent: #caa45c;
+      --accent-dark: #d8b874;
+      --divider: #33312b;
+      --overlay-bg: #1c1b19;
+      --close-btn-bg: #322f28;
+    }
+  }
+
   html, body {
     margin: 0;
     padding: 0;
     overflow: hidden;
     width: 100%;
     height: 100%;
-    background: #f2efe9;
+    background: var(--bg);
     font-family: -apple-system, Roboto, Arial, sans-serif;
   }
   #canvas-container {
@@ -27,7 +70,8 @@
     right: 0;
     padding: 12px 14px 8px 14px;
     box-sizing: border-box;
-    background: linear-gradient(to bottom, rgba(242,239,233,0.97), rgba(242,239,233,0.88) 70%, rgba(242,239,233,0));
+    background: linear-gradient(to bottom, var(--bg) 0%, var(--bg) 70%, transparent 100%);
+    opacity: 0.97;
     z-index: 10;
     pointer-events: none;
   }
@@ -42,7 +86,7 @@
     font-size: 22px;
   }
   #title {
-    color: #262524;
+    color: var(--text-primary);
     font-size: 19px;
     font-weight: 700;
     letter-spacing: 0.2px;
@@ -55,7 +99,7 @@
     align-items: center;
     justify-content: center;
     gap: 5px;
-    background: #caa45c;
+    background: var(--accent);
     color: #1a1a1a;
     padding: 9px 14px;
     border-radius: 9px;
@@ -66,7 +110,7 @@
     white-space: nowrap;
   }
   .btn:active {
-    background: #b8944e;
+    background: var(--accent-dark);
   }
   .btn-icon {
     display: inline-flex;
@@ -75,20 +119,31 @@
     width: 40px;
     height: 40px;
     border-radius: 9px;
-    background: #f0ece3;
-    color: #3a372f;
-    border: 1px solid #ddd6c6;
+    background: var(--icon-bg);
+    color: var(--icon-text);
+    border: 1px solid var(--icon-border);
     font-size: 17px;
     cursor: pointer;
     flex-shrink: 0;
   }
   .btn-icon.active {
-    background: #caa45c;
+    background: var(--accent);
     color: #1a1a1a;
-    border-color: #caa45c;
+    border-color: var(--accent);
   }
   .btn-icon:active {
-    background: #e2dbc9;
+    background: var(--icon-pressed-bg);
+  }
+  #descBtn {
+    background: transparent;
+    border-color: transparent;
+  }
+  #descBtn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  #descBtn:active {
+    background: rgba(202,164,92,0.25);
   }
   #toolRow {
     display: flex;
@@ -98,7 +153,7 @@
     -webkit-overflow-scrolling: touch;
   }
   #status {
-    color: #6b6a67;
+    color: var(--text-secondary);
     font-size: 12.5px;
     margin-top: 8px;
     min-height: 16px;
@@ -108,7 +163,7 @@
     bottom: 40px;
     left: 14px;
     right: 14px;
-    color: #8a8a86;
+    color: var(--text-muted);
     font-size: 12px;
     text-align: center;
     z-index: 10;
@@ -135,6 +190,35 @@
     color: #c0392b;
   }
 
+  #loading {
+    position: fixed;
+    top: 90px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(88%, 380px);
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 14px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    padding: 16px;
+    box-sizing: border-box;
+    z-index: 30;
+    display: none;
+    text-align: center;
+  }
+  #loadingText {
+    font-size: 14.5px;
+    font-weight: 700;
+    color: var(--accent-dark);
+    margin-bottom: 10px;
+  }
+  #loadingInstructions {
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--text-secondary);
+    text-align: left;
+  }
+
   /* Standalone "Read Description" button — separate from the icon toolbar,
      fixed near the bottom of the screen, above the printability bar. */
   #readDescBtn {
@@ -142,19 +226,19 @@
     left: 50%;
     bottom: 46px;
     transform: translateX(-50%);
-    background: #3a372f;
-    color: #f2efe9;
+    background: transparent;
+    color: var(--icon-text);
     border: none;
-    padding: 10px 18px;
-    border-radius: 22px;
-    font-size: 13.5px;
-    font-weight: 600;
-    box-shadow: 0 3px 10px rgba(0,0,0,0.18);
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    font-size: 22px;
+    box-shadow: none;
     z-index: 14;
     display: none;
   }
   #readDescBtn:active {
-    background: #262524;
+    background: rgba(58,55,47,0.12);
   }
   #readDescBtn.visible {
     display: block;
@@ -164,7 +248,7 @@
   #descReaderOverlay {
     position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
-    background: #f2efe9;
+    background: var(--bg);
     z-index: 50;
     display: none;
     flex-direction: column;
@@ -177,22 +261,22 @@
     align-items: center;
     justify-content: space-between;
     padding: 18px 16px;
-    border-bottom: 1px solid #e4ddcb;
+    border-bottom: 1px solid var(--panel-border);
     flex-shrink: 0;
   }
   #descReaderTitle {
     font-size: 17px;
     font-weight: 700;
-    color: #262524;
+    color: var(--text-primary);
   }
   #descReaderClose {
-    background: #ece7db;
+    background: var(--close-btn-bg);
     border: none;
     width: 36px;
     height: 36px;
     border-radius: 50%;
     font-size: 16px;
-    color: #3a372f;
+    color: var(--icon-text);
   }
   #descReaderBody {
     flex: 1;
@@ -200,7 +284,7 @@
     padding: 18px 20px 40px 20px;
     font-size: 15.5px;
     line-height: 1.6;
-    color: #3a372f;
+    color: var(--icon-text);
     white-space: pre-wrap;
     word-wrap: break-word;
   }
@@ -213,8 +297,8 @@
     left: 14px;
     right: 14px;
     bottom: 14px;
-    background: #ffffff;
-    border: 1px solid #e4ddcb;
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
     border-radius: 14px;
     box-shadow: 0 4px 24px rgba(0,0,0,0.15);
     padding: 14px;
@@ -230,20 +314,20 @@
   .panel-title {
     font-size: 14.5px;
     font-weight: 700;
-    color: #262524;
+    color: var(--text-primary);
     margin-bottom: 10px;
     display: flex;
     justify-content: space-between;
     align-items: center;
   }
   .panel-close {
-    background: #ece7db;
+    background: var(--close-btn-bg);
     border: none;
     width: 28px;
     height: 28px;
     border-radius: 50%;
     font-size: 14px;
-    color: #3a372f;
+    color: var(--icon-text);
     cursor: pointer;
     flex-shrink: 0;
   }
@@ -256,12 +340,12 @@
     width: 34px;
     height: 34px;
     border-radius: 50%;
-    border: 2px solid #ddd6c6;
+    border: 2px solid var(--icon-border);
     cursor: pointer;
     flex-shrink: 0;
   }
   .color-swatch.selected {
-    border-color: #262524;
+    border-color: var(--text-primary);
     border-width: 3px;
   }
   .slider-row {
@@ -275,7 +359,7 @@
   }
   .slider-label {
     font-size: 12px;
-    color: #6b6a67;
+    color: var(--text-secondary);
     min-width: 70px;
     flex-shrink: 0;
   }
@@ -286,17 +370,17 @@
   }
   #propsTable td {
     padding: 6px 4px;
-    border-bottom: 1px solid #f0ece3;
-    color: #3a372f;
+    border-bottom: 1px solid var(--icon-bg);
+    color: var(--icon-text);
   }
   #propsTable td:first-child {
-    color: #8a8a86;
+    color: var(--text-muted);
     width: 45%;
   }
   #measureResult {
     font-size: 14px;
     font-weight: 600;
-    color: #262524;
+    color: var(--text-primary);
     margin-top: 8px;
     min-height: 20px;
   }
@@ -305,7 +389,7 @@
     align-items: center;
     gap: 10px;
     padding: 8px 4px;
-    border-bottom: 1px solid #f0ece3;
+    border-bottom: 1px solid var(--icon-bg);
   }
   .reorder-icon {
     width: 32px;
@@ -316,16 +400,16 @@
   .reorder-name {
     flex: 1;
     font-size: 13.5px;
-    color: #3a372f;
+    color: var(--icon-text);
   }
   .reorder-arrow {
-    background: #f0ece3;
-    border: 1px solid #ddd6c6;
+    background: var(--icon-bg);
+    border: 1px solid var(--icon-border);
     border-radius: 6px;
     width: 30px;
     height: 30px;
     font-size: 14px;
-    color: #3a372f;
+    color: var(--icon-text);
     cursor: pointer;
     flex-shrink: 0;
   }
@@ -366,7 +450,7 @@
 <!-- Measure panel -->
 <div class="panel" id="measurePanel">
   <div class="panel-title">Measure Distance <button class="panel-close" data-close="measurePanel">✕</button></div>
-  <div style="font-size:13px; color:#6b6a67;">Tap two points on the fossil to measure the distance between them.</div>
+  <div style="font-size:13px; color:var(--text-secondary);">Tap two points on the fossil to measure the distance between them.</div>
   <div id="measureResult">No points selected.</div>
   <button class="btn" id="measureClearBtn" style="margin-top:10px;">Clear Points</button>
 </div>
@@ -374,7 +458,7 @@
 <!-- Slice panel -->
 <div class="panel" id="slicePanel">
   <div class="panel-title">Slice View <button class="panel-close" data-close="slicePanel">✕</button></div>
-  <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:#3a372f;">
+  <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--icon-text);">
     <input type="checkbox" id="sliceToggle"> Enable slicing
   </label>
   <div class="slider-row">
@@ -399,8 +483,8 @@
 <div class="panel" id="colorPanel">
   <div class="panel-title">Fossil Color <button class="panel-close" data-close="colorPanel">✕</button></div>
   <div class="color-swatch-row" id="colorSwatches"></div>
-  <div style="margin-top:14px; padding-top:12px; border-top:1px solid #f0ece3; display:flex; align-items:center; gap:10px;">
-    <span style="font-size:13px; color:#6b6a67;">Custom color:</span>
+  <div style="margin-top:14px; padding-top:12px; border-top:1px solid var(--icon-bg); display:flex; align-items:center; gap:10px;">
+    <span style="font-size:13px; color:var(--text-secondary);">Custom color:</span>
     <input type="color" id="customColorPicker" value="#b89968" style="width:44px; height:36px; border:none; border-radius:8px; cursor:pointer;">
   </div>
 </div>
@@ -414,28 +498,28 @@
 <!-- Description panel -->
 <div class="panel" id="descPanel">
   <div class="panel-title">Description <button class="panel-close" data-close="descPanel">✕</button></div>
-  <textarea id="descText" placeholder="Write notes about this fossil — species, locality, age, source, anything you want to remember." style="width:100%; min-height:120px; box-sizing:border-box; padding:10px; border-radius:8px; border:1px solid #ddd6c6; font-family:inherit; font-size:14px; resize:vertical;"></textarea>
+  <textarea id="descText" placeholder="Write notes about this fossil — species, locality, age, source, anything you want to remember." style="width:100%; min-height:120px; box-sizing:border-box; padding:10px; border-radius:8px; border:1px solid var(--icon-border); font-family:inherit; font-size:14px; resize:vertical; background:var(--panel-bg); color:var(--text-primary);"></textarea>
   <button class="btn" id="descSaveBtn" style="margin-top:10px;">Save Description</button>
-  <div id="descSavedNote" style="font-size:12px; color:#6b6a67; margin-top:6px;"></div>
+  <div id="descSavedNote" style="font-size:12px; color:var(--text-secondary); margin-top:6px;"></div>
 </div>
 
 <!-- Customize toolbar panel -->
 <div class="panel" id="customizePanel">
   <div class="panel-title">Customize Toolbar Order <button class="panel-close" data-close="customizePanel">✕</button></div>
-  <div style="font-size:12.5px; color:#6b6a67; margin-bottom:10px;">Use the arrows to move a button earlier or later in the toolbar.</div>
+  <div style="font-size:12.5px; color:var(--text-secondary); margin-bottom:10px;">Use the arrows to move a button earlier or later in the toolbar.</div>
   <div id="customizeList"></div>
 </div>
 
 <!-- Real-world scale panel -->
 <div class="panel" id="scalePanel">
   <div class="panel-title">Set Real-World Scale <button class="panel-close" data-close="scalePanel">✕</button></div>
-  <div style="font-size:12.5px; color:#6b6a67; margin-bottom:10px;">
+  <div style="font-size:12.5px; color:var(--text-secondary); margin-bottom:10px;">
     If you know the true size of this fossil, enter it here. Use Measure first to select two points, then enter what that distance actually is in real life — every future measurement on this file will be corrected to match.
   </div>
   <div class="slider-row">
     <span class="slider-label">Real distance</span>
-    <input type="number" id="realDistanceInput" placeholder="e.g. 300" style="flex:1; padding:8px; border-radius:6px; border:1px solid #ddd6c6;">
-    <select id="realDistanceUnit" style="padding:8px; border-radius:6px; border:1px solid #ddd6c6;">
+    <input type="number" id="realDistanceInput" placeholder="e.g. 300" style="flex:1; padding:8px; border-radius:6px; border:1px solid var(--icon-border); background:var(--panel-bg); color:var(--text-primary);">
+    <select id="realDistanceUnit" style="padding:8px; border-radius:6px; border:1px solid var(--icon-border); background:var(--panel-bg); color:var(--text-primary);">
       <option value="mm">mm</option>
       <option value="cm" selected>cm</option>
       <option value="m">m</option>
@@ -443,15 +527,27 @@
     </select>
   </div>
   <button class="btn" id="applyScaleBtn" style="margin-top:10px;">Apply Scale</button>
-  <div id="scaleStatus" style="font-size:12px; color:#6b6a67; margin-top:8px;"></div>
+  <div id="scaleStatus" style="font-size:12px; color:var(--text-secondary); margin-top:8px;"></div>
 </div>
 
-<div id="loading">Loading model...</div>
+<div id="loading">
+  <div id="loadingText">Please wait, your 3D object is being uploaded...</div>
+  <div id="loadingInstructions">
+    <strong>How to use LDJ 3D Viewer:</strong><br>
+    • Drag with one finger to rotate the model<br>
+    • Pinch with two fingers to zoom in and out<br>
+    • Double-tap a point on the fossil to re-centre rotation there<br>
+    • Use the toolbar icons to flip, cycle views, measure, slice, recolor, and view properties<br>
+    • Tap 📝 to write notes, and 📖 (bottom) to read them anytime<br>
+    • Tap ⚙ to reorder your toolbar icons<br>
+    • Tap 📐 after measuring two points to set the fossil's real-world size
+  </div>
+</div>
 <div id="hint">Drag to rotate · Pinch to zoom · Double-tap to re-center</div>
 <div id="printStatus"></div>
 
 <!-- Standalone button, separate from the icon toolbar, for reading the saved description -->
-<button id="readDescBtn" title="Read Description">📖 Description</button>
+<button id="readDescBtn" title="Read Description">📖</button>
 
 <!-- Full-screen description reader overlay -->
 <div id="descReaderOverlay">
@@ -486,7 +582,18 @@ const fileInput = document.getElementById('fileInput');
 
 // Scene setup
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xf2efe9);
+function getThemeBackgroundColor() {
+  const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  return isDark ? 0x1c1b19 : 0xf2efe9;
+}
+
+scene.background = new THREE.Color(getThemeBackgroundColor());
+
+if (window.matchMedia) {
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    scene.background = new THREE.Color(getThemeBackgroundColor());
+  });
+}
 
 const camera = new THREE.PerspectiveCamera(
   50, window.innerWidth / window.innerHeight, 0.01, 5000
@@ -515,7 +622,7 @@ scene.add(new THREE.AmbientLight(0xffffff, 0.45));
 const keyLight = new THREE.DirectionalLight(0xfff2dd, 1.8);
 keyLight.position.set(6, 4, 8);
 keyLight.castShadow = true;
-keyLight.shadow.mapSize.set(2048, 2048);
+keyLight.shadow.mapSize.set(1024, 1024);
 keyLight.shadow.camera.near = 0.1;
 keyLight.shadow.camera.far = 50;
 keyLight.shadow.camera.left = -5;
@@ -541,8 +648,7 @@ scene.add(fillLight);
 
 // Controls
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true;
-controls.dampingFactor = 0.18; // light damping — smooths motion but stops almost immediately, no long slide
+controls.enableDamping = false;
 controls.autoRotate = false;
 controls.autoRotateSpeed = 0;
 controls.rotateSpeed = 0.9;
@@ -556,6 +662,84 @@ controls.touches = {
   ONE: THREE.TOUCH.ROTATE,
   TWO: THREE.TOUCH.DOLLY_PAN
 };
+
+// --- Manual vertical-drag rotation fix ---
+// OrbitControls ties horizontal and vertical drag direction together via a
+// single rotateSpeed value, so it's impossible to invert just one axis using
+// its built-in settings. Since only the vertical ("up/down" / polar) drag
+// direction felt backwards, we disable OrbitControls' own rotate handling
+// and drive both axes manually, inverting only the vertical one.
+controls.enableRotate = false;
+
+let isDragging = false;
+let lastDragX = 0;
+let lastDragY = 0;
+let shadowResumeTimer = null;
+const ROTATE_SENSITIVITY = 0.008;
+
+function getSphericalFromCamera() {
+  const offset = new THREE.Vector3().subVectors(camera.position, controls.target);
+  return new THREE.Spherical().setFromVector3(offset);
+}
+
+function applySphericalToCamera(spherical) {
+  spherical.phi = Math.max(0.001, Math.min(Math.PI - 0.001, spherical.phi));
+  const offset = new THREE.Vector3().setFromSpherical(spherical);
+  camera.position.copy(controls.target).add(offset);
+  camera.lookAt(controls.target);
+}
+
+function handleDragRotate(dx, dy) {
+  const spherical = getSphericalFromCamera();
+  // Horizontal drag: natural direction (drag right -> orbit right)
+  spherical.theta -= dx * ROTATE_SENSITIVITY;
+  // Vertical drag: inverted so dragging the "top" of the model clockwise
+  // (finger moving up on the right side / down on the left) turns it
+  // clockwise on screen, matching natural expectation.
+  spherical.phi -= dy * ROTATE_SENSITIVITY;
+  applySphericalToCamera(spherical);
+
+  // Temporarily disable expensive shadow recalculation while actively
+  // dragging large meshes — this is the single biggest per-frame cost,
+  // and pausing it during motion meaningfully reduces lag on lower-end
+  // phones. Shadows re-enable a moment after you stop moving.
+  renderer.shadowMap.autoUpdate = false;
+  clearTimeout(shadowResumeTimer);
+  shadowResumeTimer = setTimeout(() => {
+    renderer.shadowMap.autoUpdate = true;
+    renderer.shadowMap.needsUpdate = true;
+  }, 150);
+}
+
+let activePointerCount = 0;
+
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  activePointerCount++;
+  if (interactionMode === 'measure') return;
+  if (activePointerCount > 1) { isDragging = false; return; }
+  isDragging = true;
+  lastDragX = e.clientX;
+  lastDragY = e.clientY;
+});
+
+renderer.domElement.addEventListener('pointermove', (e) => {
+  if (!isDragging || activePointerCount > 1) return;
+  if (interactionMode === 'measure') return;
+  const dx = e.clientX - lastDragX;
+  const dy = e.clientY - lastDragY;
+  lastDragX = e.clientX;
+  lastDragY = e.clientY;
+  handleDragRotate(dx, dy);
+});
+
+window.addEventListener('pointerup', () => {
+  activePointerCount = Math.max(0, activePointerCount - 1);
+  isDragging = false;
+});
+window.addEventListener('pointercancel', () => {
+  activePointerCount = 0;
+  isDragging = false;
+});
 
 let currentModel = null;
 
@@ -679,11 +863,18 @@ readDescBtn.addEventListener('click', () => {
       descReaderBody.classList.add('empty');
     }
     descReaderOverlay.classList.add('open');
+    renderingPaused = true;
   });
 });
 
 document.getElementById('descReaderClose').addEventListener('click', () => {
   descReaderOverlay.classList.remove('open');
+  renderer.shadowMap.autoUpdate = false;
+  renderingPaused = false;
+  setTimeout(() => {
+    renderer.shadowMap.autoUpdate = true;
+    renderer.shadowMap.needsUpdate = true;
+  }, 100);
 });
 let currentFileName = '';
 let currentFileSize = 0;
@@ -1033,14 +1224,28 @@ function clearMeasurement() {
   measureResultEl.textContent = 'No points selected.';
 }
 
+// Keeps measurement dots a small, constant size on screen no matter how far
+// zoomed in or out the camera is — otherwise a fixed world-space size looks
+// tiny when zoomed out and huge (hard to place precisely) when zoomed in.
+const MEASURE_MARKER_SCREEN_SIZE = 0.012; // fraction of camera distance
+function updateMeasureMarkerScale() {
+  measureMarkers.forEach((marker) => {
+    const dist = camera.position.distanceTo(marker.position);
+    const scale = Math.max(dist * MEASURE_MARKER_SCREEN_SIZE, 0.0005);
+    marker.scale.setScalar(scale);
+  });
+}
+
 function addMeasurePoint(point) {
-  const markerGeo = new THREE.SphereGeometry(0.02, 12, 12);
-  const markerMat = new THREE.MeshBasicMaterial({ color: 0xe74c3c });
+  const markerGeo = new THREE.SphereGeometry(1, 12, 12); // unit sphere; real size set by updateMeasureMarkerScale()
+  const markerMat = new THREE.MeshBasicMaterial({ color: 0xe74c3c, depthTest: false });
   const marker = new THREE.Mesh(markerGeo, markerMat);
+  marker.renderOrder = 999;
   marker.position.copy(point);
   scene.add(marker);
   measureMarkers.push(marker);
   measurePoints.push(point);
+  updateMeasureMarkerScale();
 
   if (measurePoints.length === 2) {
     const [a, b] = measurePoints;
@@ -1237,6 +1442,16 @@ function checkPrintability(object) {
   return { status: 'not-printable', label: '✗ Not print-ready (' + openEdges + ' open edges — surface has holes)' };
 }
 
+function formatFileSize(bytes) {
+  if (!bytes || bytes <= 0) return '—';
+  const KB = 1024;
+  const MB = KB * 1024;
+  const GB = MB * 1024;
+  if (bytes >= GB) return (bytes / GB).toFixed(2) + ' GB';
+  if (bytes >= MB) return (bytes / MB).toFixed(2) + ' MB';
+  return (bytes / KB).toFixed(2) + ' KB';
+}
+
 function updateProperties(mesh, fileName, fileSize) {
   let vertCount = 0;
   let faceCount = 0;
@@ -1251,10 +1466,9 @@ function updateProperties(mesh, fileName, fileSize) {
     }
   });
 
-  const sizeMB = fileSize ? (fileSize / (1024 * 1024)).toFixed(2) + ' MB' : '—';
   const rows = [
     ['File name', fileName || '—'],
-    ['File size', sizeMB],
+    ['File size', formatFileSize(fileSize)],
     ['Vertices', vertCount.toLocaleString()],
     ['Faces', Math.round(faceCount).toLocaleString()],
     ['Width (X)', size.x.toFixed(3)],
@@ -1490,6 +1704,13 @@ function loadFile(file) {
   currentFileName = file.name;
   currentFileSize = file.size;
 
+  const instructionsEl = document.getElementById('loadingInstructions');
+  const hasSeenInstructions = localStorage.getItem('ldjHasSeenInstructions');
+  instructionsEl.style.display = hasSeenInstructions ? 'none' : 'block';
+  if (!hasSeenInstructions) {
+    try { localStorage.setItem('ldjHasSeenInstructions', 'true'); } catch (e) { /* ignore */ }
+  }
+
   loadingEl.style.display = 'block';
   setStatus('Loading: ' + file.name);
 
@@ -1613,9 +1834,15 @@ window.addEventListener('resize', () => {
 });
 
 // Animation loop
+let renderingPaused = false;
+
 function animate() {
   requestAnimationFrame(animate);
+  if (renderingPaused) return;
   controls.update();
+  if (typeof updateMeasureMarkerScale === 'function' && measureMarkers.length > 0) {
+    updateMeasureMarkerScale();
+  }
   renderer.render(scene, camera);
 }
 animate();
