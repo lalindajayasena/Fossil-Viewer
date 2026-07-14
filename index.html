@@ -1,14 +1,13 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>LDJ 3D Viewer</title>
 <link rel="manifest" href="./manifest.json">
-<meta name="theme-color" content="#f2efe9" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#1c1b19" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f2efe9" id="themeColorMeta">
 <style>
-  :root {
+  :root, [data-theme="light"] {
     --bg: #f2efe9;
     --panel-bg: #ffffff;
     --panel-border: #e4ddcb;
@@ -28,26 +27,24 @@
     --close-btn-bg: #ece7db;
   }
 
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #1c1b19;
-      --panel-bg: #242320;
-      --panel-border: #3a382f;
-      --text-primary: #ece8dd;
-      --text-secondary: #b5b2a7;
-      --text-muted: #8f8c81;
-      --icon-bg: #2e2c27;
-      --icon-border: #423f35;
-      --icon-text: #ece8dd;
-      --icon-active-bg: #caa45c;
-      --icon-active-text: #1a1a1a;
-      --icon-pressed-bg: #3a3730;
-      --accent: #caa45c;
-      --accent-dark: #d8b874;
-      --divider: #33312b;
-      --overlay-bg: #1c1b19;
-      --close-btn-bg: #322f28;
-    }
+  [data-theme="dark"] {
+    --bg: #1c1b19;
+    --panel-bg: #242320;
+    --panel-border: #3a382f;
+    --text-primary: #ece8dd;
+    --text-secondary: #b5b2a7;
+    --text-muted: #8f8c81;
+    --icon-bg: #2e2c27;
+    --icon-border: #423f35;
+    --icon-text: #ece8dd;
+    --icon-active-bg: #caa45c;
+    --icon-active-text: #1a1a1a;
+    --icon-pressed-bg: #3a3730;
+    --accent: #caa45c;
+    --accent-dark: #d8b874;
+    --divider: #33312b;
+    --overlay-bg: #1c1b19;
+    --close-btn-bg: #322f28;
   }
 
   html, body {
@@ -451,6 +448,7 @@
     <button class="btn-icon" id="customizeBtn" title="Customize toolbar">⚙</button>
     <button class="btn-icon" id="scaleBtn" title="Set real-world scale">📐</button>
     <button class="btn-icon" id="invertRotateBtn" title="Flip rotation direction">⇄</button>
+    <button class="btn-icon" id="themeToggleBtn" title="Toggle dark mode">🌙</button>
     <button class="btn-icon" id="fullscreenBtn" title="Full view">⛶</button>
   </div>
 </div>
@@ -590,18 +588,25 @@ const fileInput = document.getElementById('fileInput');
 
 // Scene setup
 const scene = new THREE.Scene();
-function getThemeBackgroundColor() {
-  const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-  return isDark ? 0x1c1b19 : 0xf2efe9;
+// Theme is explicitly controlled by the app (not auto-detected from the
+// browser), since some mobile browsers force a dark web-page theme
+// independently of the phone's actual system dark mode setting, which
+// caused the app to appear dark even when the device was in light mode.
+let currentTheme = 'light';
+try {
+  const savedTheme = localStorage.getItem('ldjTheme');
+  if (savedTheme === 'light' || savedTheme === 'dark') currentTheme = savedTheme;
+} catch (e) { /* default to light */ }
+
+function applyTheme(theme) {
+  currentTheme = theme;
+  document.documentElement.setAttribute('data-theme', theme);
+  document.getElementById('themeColorMeta').setAttribute('content', theme === 'dark' ? '#1c1b19' : '#f2efe9');
+  scene.background = new THREE.Color(theme === 'dark' ? 0x1c1b19 : 0xf2efe9);
+  try { localStorage.setItem('ldjTheme', theme); } catch (e) { /* ignore */ }
 }
 
-scene.background = new THREE.Color(getThemeBackgroundColor());
-
-if (window.matchMedia) {
-  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-    scene.background = new THREE.Color(getThemeBackgroundColor());
-  });
-}
+applyTheme(currentTheme);
 
 const camera = new THREE.PerspectiveCamera(
   50, window.innerWidth / window.innerHeight, 0.01, 5000
@@ -717,6 +722,13 @@ function getSphericalFromCamera() {
 
 function applySphericalToCamera(spherical) {
   spherical.phi = Math.max(0.001, Math.min(Math.PI - 0.001, spherical.phi));
+  // Always use a consistent "up" direction for manual rotation math. If a
+  // different up vector was left behind by another feature (like the
+  // Top/Bottom view-cycle buttons), the camera's basis becomes skewed and
+  // rotation starts behaving inconsistently between the top and bottom of
+  // the model — exactly the "upper moves one way, lower moves the other"
+  // symptom. Resetting it here keeps our spherical math self-consistent.
+  camera.up.set(0, 1, 0);
   const offset = new THREE.Vector3().setFromSpherical(spherical);
   camera.position.copy(controls.target).add(offset);
   camera.lookAt(controls.target);
@@ -1655,7 +1667,8 @@ const BUTTON_LABELS = {
   descBtn: 'Description',
   customizeBtn: 'Customize Toolbar',
   scaleBtn: 'Set Real-World Scale',
-  invertRotateBtn: 'Flip Rotation Direction'
+  invertRotateBtn: 'Flip Rotation Direction',
+  themeToggleBtn: 'Dark / Light Mode'
 };
 
 function getCurrentToolbarOrder() {
@@ -1796,6 +1809,20 @@ invertRotateBtn.addEventListener('click', () => {
   setStatus(verticalRotateInverted
     ? 'Rotation direction flipped.'
     : 'Rotation direction back to default.');
+});
+
+// ---------- THEME TOGGLE (dark / light) ----------
+const themeToggleBtn = document.getElementById('themeToggleBtn');
+function updateThemeToggleIcon() {
+  themeToggleBtn.textContent = currentTheme === 'dark' ? '☀️' : '🌙';
+  themeToggleBtn.classList.toggle('active', currentTheme === 'dark');
+}
+updateThemeToggleIcon();
+
+themeToggleBtn.addEventListener('click', () => {
+  applyTheme(currentTheme === 'dark' ? 'light' : 'dark');
+  updateThemeToggleIcon();
+  setStatus(currentTheme === 'dark' ? 'Dark mode on.' : 'Light mode on.');
 });
 
 // ---------- FULL VIEW MODE (hide all UI) ----------
