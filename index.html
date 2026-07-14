@@ -224,6 +224,7 @@
   #readDescBtn {
     position: fixed;
     left: 50%;
+    top: auto;
     bottom: 46px;
     transform: translateX(-50%);
     background: transparent;
@@ -234,8 +235,14 @@
     border-radius: 50%;
     font-size: 22px;
     box-shadow: none;
-    z-index: 14;
+    z-index: 40;
     display: none;
+    touch-action: none;
+    cursor: grab;
+  }
+  #readDescBtn.dragging {
+    cursor: grabbing;
+    background: rgba(58,55,47,0.15);
   }
   #readDescBtn:active {
     background: rgba(58,55,47,0.12);
@@ -693,10 +700,9 @@ function handleDragRotate(dx, dy) {
   const spherical = getSphericalFromCamera();
   // Horizontal drag: natural direction (drag right -> orbit right)
   spherical.theta -= dx * ROTATE_SENSITIVITY;
-  // Vertical drag: inverted so dragging the "top" of the model clockwise
-  // (finger moving up on the right side / down on the left) turns it
-  // clockwise on screen, matching natural expectation.
-  spherical.phi -= dy * ROTATE_SENSITIVITY;
+  // Vertical drag: dragging up moves the camera up and over the top of the
+  // model (matching the finger), dragging down moves it under.
+  spherical.phi += dy * ROTATE_SENSITIVITY;
   applySphericalToCamera(spherical);
 
   // Temporarily disable expensive shadow recalculation while actively
@@ -851,7 +857,91 @@ function refreshReadDescButton() {
   });
 }
 
-readDescBtn.addEventListener('click', () => {
+// ---------- DRAGGABLE DESCRIPTION BUTTON ----------
+const READ_DESC_POS_KEY = 'ldjReadDescBtnPos';
+
+function applyReadDescBtnPosition(x, y) {
+  readDescBtn.style.left = x + 'px';
+  readDescBtn.style.top = y + 'px';
+  readDescBtn.style.bottom = 'auto';
+  readDescBtn.style.transform = 'none';
+}
+
+function clampToScreen(x, y) {
+  const size = 44;
+  const margin = 4;
+  const maxX = window.innerWidth - size - margin;
+  const maxY = window.innerHeight - size - margin;
+  return {
+    x: Math.min(Math.max(x, margin), Math.max(maxX, margin)),
+    y: Math.min(Math.max(y, margin), Math.max(maxY, margin))
+  };
+}
+
+function loadSavedReadDescBtnPosition() {
+  try {
+    const saved = localStorage.getItem(READ_DESC_POS_KEY);
+    if (saved) {
+      const { x, y } = JSON.parse(saved);
+      const clamped = clampToScreen(x, y);
+      applyReadDescBtnPosition(clamped.x, clamped.y);
+    }
+  } catch (e) { /* keep default position */ }
+}
+
+function saveReadDescBtnPosition(x, y) {
+  try {
+    localStorage.setItem(READ_DESC_POS_KEY, JSON.stringify({ x, y }));
+  } catch (e) { /* ignore storage errors */ }
+}
+
+let descBtnDragging = false;
+let descBtnMoved = false;
+let descBtnDragOffsetX = 0;
+let descBtnDragOffsetY = 0;
+
+readDescBtn.addEventListener('pointerdown', (e) => {
+  descBtnDragging = true;
+  descBtnMoved = false;
+  const rect = readDescBtn.getBoundingClientRect();
+  descBtnDragOffsetX = e.clientX - rect.left;
+  descBtnDragOffsetY = e.clientY - rect.top;
+  readDescBtn.classList.add('dragging');
+  e.preventDefault();
+});
+
+window.addEventListener('pointermove', (e) => {
+  if (!descBtnDragging) return;
+  descBtnMoved = true;
+  const newX = e.clientX - descBtnDragOffsetX;
+  const newY = e.clientY - descBtnDragOffsetY;
+  const clamped = clampToScreen(newX, newY);
+  applyReadDescBtnPosition(clamped.x, clamped.y);
+});
+
+window.addEventListener('pointerup', (e) => {
+  if (!descBtnDragging) return;
+  descBtnDragging = false;
+  readDescBtn.classList.remove('dragging');
+  if (descBtnMoved) {
+    const rect = readDescBtn.getBoundingClientRect();
+    saveReadDescBtnPosition(rect.left, rect.top);
+  }
+});
+
+loadSavedReadDescBtnPosition();
+window.addEventListener('resize', () => {
+  const rect = readDescBtn.getBoundingClientRect();
+  const clamped = clampToScreen(rect.left, rect.top);
+  applyReadDescBtnPosition(clamped.x, clamped.y);
+});
+
+readDescBtn.addEventListener('click', (e) => {
+  if (descBtnMoved) {
+    // This click was the tail end of a drag, not a tap — ignore it.
+    descBtnMoved = false;
+    return;
+  }
   if (!currentFileName) return;
   getDescription(currentFileName).then((text) => {
     descReaderTitle.textContent = currentFileName;
