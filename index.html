@@ -698,16 +698,16 @@ const ROTATE_SENSITIVITY = 0.01;
 
 // Single direction flag — flip with the toolbar button if rotation ever
 // feels backwards. Saved so the choice sticks between sessions.
-let rotationInverted = true;
+let rotationInverted = false;
 try {
-  const saved = localStorage.getItem('ldjRotationInvertedV2');
-  rotationInverted = saved === null ? true : saved === 'true';
-} catch (e) { /* default to true */ }
+  const saved = localStorage.getItem('ldjRotationInvertedV3');
+  rotationInverted = saved === 'true';
+} catch (e) { /* default to false */ }
 
 function toggleRotationDirection() {
   rotationInverted = !rotationInverted;
   try {
-    localStorage.setItem('ldjRotationInvertedV2', rotationInverted ? 'true' : 'false');
+    localStorage.setItem('ldjRotationInvertedV3', rotationInverted ? 'true' : 'false');
   } catch (e) { /* ignore storage errors */ }
 }
 // Old function names kept as harmless aliases in case anything else calls them.
@@ -719,14 +719,13 @@ function handleDragRotate(dx, dy) {
 
   const sign = rotationInverted ? -1 : 1;
 
-  // Build a rotation from screen-space drag: dragging right spins the
-  // model right around the world's vertical (Y) axis; dragging down spins
-  // it down around the camera's current horizontal (X) axis. Applying
-  // these as quaternions to the model directly means every point on the
-  // model — top, bottom, anywhere — always rotates together, consistently,
-  // in the same direction as the finger.
-  const yawAngle = -dx * ROTATE_SENSITIVITY * sign;
-  const pitchAngle = -dy * ROTATE_SENSITIVITY * sign;
+  // Dragging the model directly: your finger moving right should pull the
+  // near side of the model to the right (spinning it to match your hand),
+  // and your finger moving up should pull the near side up and over.
+  // Written explicitly with no hidden sign confusion — `sign` is the ONLY
+  // multiplier that changes direction, controlled by the ⇄ toolbar button.
+  const yawAngle = dx * ROTATE_SENSITIVITY * sign;
+  const pitchAngle = dy * ROTATE_SENSITIVITY * sign;
 
   const yawQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yawAngle);
 
