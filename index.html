@@ -676,71 +676,75 @@ controls.touches = {
   TWO: THREE.TOUCH.DOLLY_PAN
 };
 
-// --- Manual vertical-drag rotation fix ---
-// OrbitControls ties horizontal and vertical drag direction together via a
-// single rotateSpeed value, so it's impossible to invert just one axis using
-// its built-in settings. Since only the vertical ("up/down" / polar) drag
-// direction felt backwards, we disable OrbitControls' own rotate handling
-// and drive both axes manually, inverting only the vertical one.
+// --- Trackball-style rotation (rebuilt from scratch) ---
+// The previous approach manipulated the camera's spherical coordinates and
+// "up" vector directly, which is fragile: it can develop inconsistent
+// behavior near the poles or after camera.up gets changed elsewhere (e.g.
+// the Top/Bottom view buttons), causing different parts of the model to
+// rotate in different directions during the same drag.
+//
+// This version avoids that entire class of bug: instead of moving the
+// camera, we rotate the MODEL itself using quaternions built directly from
+// screen-space drag deltas. Quaternion rotation has no poles and no gimbal
+// lock, so the top and bottom of the model always move consistently with
+// the same drag gesture, no matter the current orientation.
 controls.enableRotate = false;
 
 let isDragging = false;
 let lastDragX = 0;
 let lastDragY = 0;
 let shadowResumeTimer = null;
-const ROTATE_SENSITIVITY = 0.008;
+const ROTATE_SENSITIVITY = 0.01;
 
-// Rotation direction, user-adjustable — flip with the ⇅ toolbar button if
-// dragging still feels backwards on either axis. Saved so the choice sticks.
-let verticalRotateInverted = true;
-let horizontalRotateInverted = true;
+// Single direction flag — flip with the toolbar button if rotation ever
+// feels backwards. Saved so the choice sticks between sessions.
+let rotationInverted = false;
 try {
-  const savedV = localStorage.getItem('ldjVerticalRotateInverted');
-  verticalRotateInverted = savedV === null ? true : savedV === 'true';
-  const savedH = localStorage.getItem('ldjHorizontalRotateInverted');
-  horizontalRotateInverted = savedH === null ? true : savedH === 'true';
-} catch (e) { /* defaults already set above */ }
+  const saved = localStorage.getItem('ldjRotationInverted');
+  rotationInverted = saved === 'true';
+} catch (e) { /* default to false */ }
 
-function toggleVerticalRotateDirection() {
-  verticalRotateInverted = !verticalRotateInverted;
+function toggleRotationDirection() {
+  rotationInverted = !rotationInverted;
   try {
-    localStorage.setItem('ldjVerticalRotateInverted', verticalRotateInverted ? 'true' : 'false');
+    localStorage.setItem('ldjRotationInverted', rotationInverted ? 'true' : 'false');
   } catch (e) { /* ignore storage errors */ }
 }
-
-function toggleHorizontalRotateDirection() {
-  horizontalRotateInverted = !horizontalRotateInverted;
-  try {
-    localStorage.setItem('ldjHorizontalRotateInverted', horizontalRotateInverted ? 'true' : 'false');
-  } catch (e) { /* ignore storage errors */ }
-}
-
-function getSphericalFromCamera() {
-  const offset = new THREE.Vector3().subVectors(camera.position, controls.target);
-  return new THREE.Spherical().setFromVector3(offset);
-}
-
-function applySphericalToCamera(spherical) {
-  spherical.phi = Math.max(0.001, Math.min(Math.PI - 0.001, spherical.phi));
-  // Always use a consistent "up" direction for manual rotation math. If a
-  // different up vector was left behind by another feature (like the
-  // Top/Bottom view-cycle buttons), the camera's basis becomes skewed and
-  // rotation starts behaving inconsistently between the top and bottom of
-  // the model — exactly the "upper moves one way, lower moves the other"
-  // symptom. Resetting it here keeps our spherical math self-consistent.
-  camera.up.set(0, 1, 0);
-  const offset = new THREE.Vector3().setFromSpherical(spherical);
-  camera.position.copy(controls.target).add(offset);
-  camera.lookAt(controls.target);
-}
+// Old function names kept as harmless aliases in case anything else calls them.
+function toggleVerticalRotateDirection() { toggleRotationDirection(); }
+function toggleHorizontalRotateDirection() { /* no-op, kept for compatibility */ }
 
 function handleDragRotate(dx, dy) {
-  const spherical = getSphericalFromCamera();
-  const horizontalSign = horizontalRotateInverted ? 1 : -1;
-  spherical.theta += dx * ROTATE_SENSITIVITY * horizontalSign;
-  const verticalSign = verticalRotateInverted ? -1 : 1;
-  spherical.phi += dy * ROTATE_SENSITIVITY * verticalSign;
-  applySphericalToCamera(spherical);
+  if (!currentModel) return;
+
+  const sign = rotationInverted ? -1 : 1;
+
+  // Build a rotation from screen-space drag: dragging right spins the
+  // model right around the world's vertical (Y) axis; dragging down spins
+  // it down around the camera's current horizontal (X) axis. Applying
+  // these as quaternions to the model directly means every point on the
+  // model — top, bottom, anywhere — always rotates together, consistently,
+  // in the same direction as the finger.
+  const yawAngle = -dx * ROTATE_SENSITIVITY * sign;
+  const pitchAngle = -dy * ROTATE_SENSITIVITY * sign;
+
+  const yawQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yawAngle);
+
+  const camRight = new THREE.Vector3();
+  camera.getWorldDirection(new THREE.Vector3()); // ensure matrix is current
+  camRight.setFromMatrixColumn(camera.matrixWorld, 0).normalize();
+  const pitchQuat = new THREE.Quaternion().setFromAxisAngle(camRight, pitchAngle);
+
+  // Rotate around the model's own visual center, not its local origin,
+  // so it spins in place rather than swinging around a corner.
+  const box = new THREE.Box3().setFromObject(currentModel);
+  const center = box.getCenter(new THREE.Vector3());
+
+  currentModel.position.sub(center);
+  currentModel.position.applyQuaternion(yawQuat).applyQuaternion(pitchQuat);
+  currentModel.position.add(center);
+
+  currentModel.quaternion.premultiply(yawQuat).premultiply(pitchQuat);
 
   // Temporarily disable expensive shadow recalculation while actively
   // dragging large meshes — this is the single biggest per-frame cost,
@@ -1198,6 +1202,7 @@ flipYBtn.addEventListener('click', () => {
 const resetBtn = document.getElementById('resetBtn');
 resetBtn.addEventListener('click', () => {
   if (currentModel) {
+    currentModel.quaternion.identity();
     frameModel(currentModel);
     currentViewIndex = -1;
     viewCycleBtn.textContent = '⬤';
@@ -1798,15 +1803,14 @@ document.querySelectorAll('.panel-close').forEach((btn) => {
 // ---------- ROTATION DIRECTION TOGGLE (both axes) ----------
 const invertRotateBtn = document.getElementById('invertRotateBtn');
 function updateInvertRotateBtnLabel() {
-  invertRotateBtn.classList.toggle('active', verticalRotateInverted || horizontalRotateInverted);
+  invertRotateBtn.classList.toggle('active', rotationInverted);
 }
 updateInvertRotateBtnLabel();
 
 invertRotateBtn.addEventListener('click', () => {
-  toggleVerticalRotateDirection();
-  toggleHorizontalRotateDirection();
+  toggleRotationDirection();
   updateInvertRotateBtnLabel();
-  setStatus(verticalRotateInverted
+  setStatus(rotationInverted
     ? 'Rotation direction flipped.'
     : 'Rotation direction back to default.');
 });
