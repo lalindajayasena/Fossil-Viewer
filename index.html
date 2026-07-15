@@ -698,16 +698,16 @@ const ROTATE_SENSITIVITY = 0.01;
 
 // Single direction flag — flip with the toolbar button if rotation ever
 // feels backwards. Saved so the choice sticks between sessions.
-let rotationInverted = false;
+let rotationInverted = true;
 try {
-  const saved = localStorage.getItem('ldjRotationInverted');
-  rotationInverted = saved === 'true';
-} catch (e) { /* default to false */ }
+  const saved = localStorage.getItem('ldjRotationInvertedV2');
+  rotationInverted = saved === null ? true : saved === 'true';
+} catch (e) { /* default to true */ }
 
 function toggleRotationDirection() {
   rotationInverted = !rotationInverted;
   try {
-    localStorage.setItem('ldjRotationInverted', rotationInverted ? 'true' : 'false');
+    localStorage.setItem('ldjRotationInvertedV2', rotationInverted ? 'true' : 'false');
   } catch (e) { /* ignore storage errors */ }
 }
 // Old function names kept as harmless aliases in case anything else calls them.
