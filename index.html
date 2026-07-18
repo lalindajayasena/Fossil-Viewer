@@ -507,6 +507,15 @@
   <textarea id="descText" placeholder="Write notes about this fossil — species, locality, age, source, anything you want to remember." style="width:100%; min-height:120px; box-sizing:border-box; padding:10px; border-radius:8px; border:1px solid var(--icon-border); font-family:inherit; font-size:14px; resize:vertical; background:var(--panel-bg); color:var(--text-primary);"></textarea>
   <button class="btn" id="descSaveBtn" style="margin-top:10px;">Save Description</button>
   <div id="descSavedNote" style="font-size:12px; color:var(--text-secondary); margin-top:6px;"></div>
+  <div style="border-top:1px solid var(--icon-bg); margin-top:14px; padding-top:12px;">
+    <div style="font-size:12px; color:var(--text-secondary); margin-bottom:8px;">
+      Descriptions are stored on this device only. Back them up occasionally so they survive a browser data clear or a new phone.
+    </div>
+    <button class="btn" id="descBackupBtn" style="margin-right:6px;">⬇ Backup All</button>
+    <label for="descRestoreInput" class="btn" style="display:inline-block;">⬆ Restore</label>
+    <input type="file" id="descRestoreInput" accept=".json" style="display:none;">
+    <div id="descBackupNote" style="font-size:12px; color:var(--text-secondary); margin-top:6px;"></div>
+  </div>
 </div>
 
 <!-- Customize toolbar panel -->
@@ -876,6 +885,80 @@ document.getElementById('descSaveBtn').addEventListener('click', () => {
     refreshReadDescButton();
   });
 });
+
+// ---------- DESCRIPTION BACKUP / RESTORE ----------
+// Descriptions live in this browser's IndexedDB only. That storage can be
+// wiped by clearing browser/site data, low device storage, or switching
+// phones — none of which touch this backup file once it's downloaded.
+function getAllDescriptions() {
+  return descDBReady.then((db) => {
+    if (!db) return [];
+    return new Promise((resolve) => {
+      const tx = db.transaction(DESC_STORE_NAME, 'readonly');
+      const store = tx.objectStore(DESC_STORE_NAME);
+      const request = store.getAll();
+      request.onsuccess = () => resolve(request.result || []);
+      request.onerror = () => resolve([]);
+    });
+  });
+}
+
+document.getElementById('descBackupBtn').addEventListener('click', () => {
+  const noteEl = document.getElementById('descBackupNote');
+  noteEl.textContent = 'Preparing backup...';
+  getAllDescriptions().then((entries) => {
+    if (entries.length === 0) {
+      noteEl.textContent = 'No saved descriptions to back up yet.';
+      return;
+    }
+    const payload = {
+      app: 'LDJ 3D Viewer',
+      exportedAt: new Date().toISOString(),
+      descriptions: entries
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'ldj-viewer-descriptions-backup.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    noteEl.textContent = 'Backup downloaded ✓ (' + entries.length + ' description' + (entries.length === 1 ? '' : 's') + ')';
+  });
+});
+
+document.getElementById('descRestoreInput').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  const noteEl = document.getElementById('descBackupNote');
+  if (!file) return;
+
+  noteEl.textContent = 'Restoring...';
+  const reader = new FileReader();
+  reader.onload = (evt) => {
+    try {
+      const payload = JSON.parse(evt.target.result);
+      const entries = Array.isArray(payload.descriptions) ? payload.descriptions : [];
+      if (entries.length === 0) {
+        noteEl.textContent = 'That file has no descriptions in it.';
+        return;
+      }
+      Promise.all(entries.map((entry) => saveDescription(entry.fileName, entry.text)))
+        .then(() => {
+          noteEl.textContent = 'Restored ✓ (' + entries.length + ' description' + (entries.length === 1 ? '' : 's') + ')';
+          refreshReadDescButton();
+          if (currentFileName) loadDescriptionForCurrentFile();
+        });
+    } catch (err) {
+      noteEl.textContent = 'Could not read that backup file.';
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+});
+
+
 
 // ---------- STANDALONE "READ DESCRIPTION" BUTTON (separate from the toolbar) ----------
 const readDescBtn = document.getElementById('readDescBtn');
