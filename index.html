@@ -1022,10 +1022,15 @@ let descBtnDragging = false;
 let descBtnMoved = false;
 let descBtnDragOffsetX = 0;
 let descBtnDragOffsetY = 0;
+let descBtnPointerStartX = 0;
+let descBtnPointerStartY = 0;
+const DESC_BTN_DRAG_THRESHOLD = 10; // pixels of movement before it counts as a real drag, not tap jitter
 
 readDescBtn.addEventListener('pointerdown', (e) => {
   descBtnDragging = true;
   descBtnMoved = false;
+  descBtnPointerStartX = e.clientX;
+  descBtnPointerStartY = e.clientY;
   const rect = readDescBtn.getBoundingClientRect();
   descBtnDragOffsetX = e.clientX - rect.left;
   descBtnDragOffsetY = e.clientY - rect.top;
@@ -1035,6 +1040,8 @@ readDescBtn.addEventListener('pointerdown', (e) => {
 
 window.addEventListener('pointermove', (e) => {
   if (!descBtnDragging) return;
+  const distMoved = Math.hypot(e.clientX - descBtnPointerStartX, e.clientY - descBtnPointerStartY);
+  if (distMoved < DESC_BTN_DRAG_THRESHOLD) return; // still within tap tolerance, not a real drag yet
   descBtnMoved = true;
   const newX = e.clientX - descBtnDragOffsetX;
   const newY = e.clientY - descBtnDragOffsetY;
