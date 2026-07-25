@@ -247,6 +247,50 @@
     color: #c0392b;
   }
 
+  #subtitleBar {
+    position: fixed;
+    left: 50%;
+    bottom: 150px;
+    transform: translateX(-50%);
+    width: min(90%, 480px);
+    z-index: 18;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+  #subtitleBar.active {
+    display: flex;
+  }
+  #subtitleText {
+    background: rgba(20,18,15,0.82);
+    color: #ffffff;
+    font-size: 15px;
+    line-height: 1.5;
+    text-align: center;
+    padding: 10px 16px;
+    border-radius: 10px;
+    box-shadow: 0 3px 14px rgba(0,0,0,0.3);
+    min-height: 22px;
+  }
+  #subtitleControls {
+    display: flex;
+    gap: 8px;
+  }
+  #subtitleControls button {
+    background: rgba(20,18,15,0.75);
+    color: #ffffff;
+    border: none;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  #subtitleControls button:active {
+    background: rgba(20,18,15,0.95);
+  }
+
   #loading {
     position: fixed;
     top: 90px;
@@ -516,6 +560,7 @@
     <button class="btn-icon" id="descBtn" title="Description">📝</button>
     <button class="btn-icon" id="customizeBtn" title="Customize toolbar">⚙</button>
     <button class="btn-icon" id="scaleBtn" title="Set real-world scale">📐</button>
+    <button class="btn-icon" id="subtitleBtn" title="Play description as subtitles">💬</button>
     <button class="btn-icon" id="invertRotateBtn" title="Flip rotation direction">⇄</button>
     <button class="btn-icon" id="themeToggleBtn" title="Toggle dark mode">🌙</button>
     <button class="btn-icon" id="fullscreenBtn" title="Full view">⛶</button>
@@ -629,6 +674,19 @@
 </div>
 <div id="hint">Drag to rotate · Pinch to zoom · Double-tap to re-center</div>
 <div id="printStatus"></div>
+
+<!-- Movie-style subtitle overlay for playing a saved description while
+     freely viewing the model — the 3D view stays fully interactive
+     underneath, this just floats text over it. -->
+<div id="subtitleBar">
+  <div id="subtitleText"></div>
+  <div id="subtitleControls">
+    <button id="subtitlePrevBtn" title="Previous line">⏮</button>
+    <button id="subtitlePlayPauseBtn" title="Play / Pause">⏸</button>
+    <button id="subtitleNextBtn" title="Next line">⏭</button>
+    <button id="subtitleCloseBtn" title="Close subtitles">✕</button>
+  </div>
+</div>
 
 <!-- Standalone button, separate from the icon toolbar, for reading the saved description -->
 <button id="readDescBtn" title="Read Description">📖</button>
@@ -1308,6 +1366,10 @@ function addMeshToScene(mesh) {
   if (typeof refreshReadDescButton === 'function') {
     refreshReadDescButton();
   }
+
+  if (typeof closeSubtitles === 'function') {
+    closeSubtitles();
+  }
 }
 
 // Detects which side of a thin slab has more surface detail (the fossil face)
@@ -1855,7 +1917,8 @@ const BUTTON_LABELS = {
   customizeBtn: 'Customize Toolbar',
   scaleBtn: 'Set Real-World Scale',
   invertRotateBtn: 'Flip Rotation Direction',
-  themeToggleBtn: 'Dark / Light Mode'
+  themeToggleBtn: 'Dark / Light Mode',
+  subtitleBtn: 'Play Description as Subtitles'
 };
 
 function getCurrentToolbarOrder() {
@@ -1976,6 +2039,121 @@ document.getElementById('applyScaleBtn').addEventListener('click', () => {
 
   currentModel.userData.realWorldMmPerFileUnit = mmPerFileUnit;
   statusEl.textContent = 'Scale applied ✓ — future measurements on this file will show real-world size.';
+});
+
+// ---------- SUBTITLE-STYLE DESCRIPTION PLAYBACK ----------
+// Splits the saved description into sentence-length chunks and displays
+// them one at a time like movie subtitles, auto-advancing on a timer,
+// while the 3D model stays fully visible and interactive underneath.
+const subtitleBar = document.getElementById('subtitleBar');
+const subtitleTextEl = document.getElementById('subtitleText');
+const subtitlePlayPauseBtn = document.getElementById('subtitlePlayPauseBtn');
+
+let subtitleLines = [];
+let subtitleIndex = 0;
+let subtitlePlaying = false;
+let subtitleTimer = null;
+const SUBTITLE_MS_PER_LINE = 3200;
+
+function splitIntoSubtitleLines(text) {
+  if (!text) return [];
+  // Split on sentence-ending punctuation, keep it, and drop empty fragments.
+  const rough = text.match(/[^.!?]+[.!?]*/g) || [text];
+  return rough.map(s => s.trim()).filter(s => s.length > 0);
+}
+
+function showSubtitleLine(index) {
+  if (subtitleLines.length === 0) {
+    subtitleTextEl.textContent = 'No description saved for this file yet.';
+    return;
+  }
+  subtitleIndex = Math.max(0, Math.min(index, subtitleLines.length - 1));
+  subtitleTextEl.textContent = subtitleLines[subtitleIndex];
+}
+
+function stepSubtitle(forward) {
+  if (subtitleLines.length === 0) return;
+  const next = subtitleIndex + (forward ? 1 : -1);
+  if (next >= subtitleLines.length) {
+    pauseSubtitles();
+    showSubtitleLine(subtitleLines.length - 1);
+    return;
+  }
+  showSubtitleLine(next);
+}
+
+function playSubtitles() {
+  if (subtitleLines.length === 0) return;
+  subtitlePlaying = true;
+  subtitlePlayPauseBtn.textContent = '⏸';
+  clearInterval(subtitleTimer);
+  subtitleTimer = setInterval(() => {
+    if (subtitleIndex >= subtitleLines.length - 1) {
+      pauseSubtitles();
+      return;
+    }
+    stepSubtitle(true);
+  }, SUBTITLE_MS_PER_LINE);
+}
+
+function pauseSubtitles() {
+  subtitlePlaying = false;
+  subtitlePlayPauseBtn.textContent = '▶';
+  clearInterval(subtitleTimer);
+}
+
+function openSubtitles() {
+  if (!currentFileName) {
+    setStatus('Load a fossil file first.');
+    return;
+  }
+  getDescription(currentFileName).then((text) => {
+    subtitleLines = splitIntoSubtitleLines(text);
+    subtitleIndex = 0;
+    subtitleBar.classList.add('active');
+    showSubtitleLine(0);
+    if (subtitleLines.length > 1) {
+      playSubtitles();
+    } else {
+      pauseSubtitles();
+    }
+  });
+}
+
+function closeSubtitles() {
+  pauseSubtitles();
+  subtitleBar.classList.remove('active');
+}
+
+document.getElementById('subtitleBtn').addEventListener('click', () => {
+  if (subtitleBar.classList.contains('active')) {
+    closeSubtitles();
+  } else {
+    openSubtitles();
+  }
+});
+
+document.getElementById('subtitlePlayPauseBtn').addEventListener('click', () => {
+  if (subtitlePlaying) {
+    pauseSubtitles();
+  } else {
+    if (subtitleIndex >= subtitleLines.length - 1) subtitleIndex = -1; // restart from beginning if at the end
+    playSubtitles();
+  }
+});
+
+document.getElementById('subtitlePrevBtn').addEventListener('click', () => {
+  pauseSubtitles();
+  stepSubtitle(false);
+});
+
+document.getElementById('subtitleNextBtn').addEventListener('click', () => {
+  pauseSubtitles();
+  stepSubtitle(true);
+});
+
+document.getElementById('subtitleCloseBtn').addEventListener('click', () => {
+  closeSubtitles();
 });
 
 document.querySelectorAll('.panel-close').forEach((btn) => {
