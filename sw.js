@@ -1,10 +1,10 @@
-const CACHE_NAME = 'fossil-viewer-v30';
+const CACHE_NAME = 'fossil-viewer-v31';
 
 const URLS_TO_CACHE = [
   './',
   './index.html',
   './manifest.json',
-  './icon.svg',
+  './icon.png',
   'https://unpkg.com/three@0.160.0/build/three.module.js',
   'https://unpkg.com/three@0.160.0/examples/jsm/controls/OrbitControls.js',
   'https://unpkg.com/three@0.160.0/examples/jsm/loaders/STLLoader.js',
