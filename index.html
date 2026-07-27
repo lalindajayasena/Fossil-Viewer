@@ -252,10 +252,11 @@
   #subtitleBar {
     position: fixed;
     left: 50%;
-    bottom: 150px;
+    top: 18px;
+    bottom: auto;
     transform: translateX(-50%);
     width: min(90%, 480px);
-    z-index: 18;
+    z-index: 45;
     display: none;
     flex-direction: column;
     align-items: center;
@@ -2055,7 +2056,7 @@ let subtitleLines = [];
 let subtitleIndex = 0;
 let subtitlePlaying = false;
 let subtitleTimer = null;
-const SUBTITLE_MS_PER_LINE = 3200;
+const SUBTITLE_MS_PER_LINE = 7000;
 
 function splitIntoSubtitleLines(text) {
   if (!text) return [];
@@ -2119,12 +2120,20 @@ function openSubtitles() {
     } else {
       pauseSubtitles();
     }
+    // Switch to full view so the toolbar/panels don't compete for space
+    // with the model while subtitles are playing.
+    if (typeof toggleFullView === 'function' && !isFullView) {
+      toggleFullView();
+    }
   });
 }
 
 function closeSubtitles() {
   pauseSubtitles();
   subtitleBar.classList.remove('active');
+  if (typeof toggleFullView === 'function' && isFullView) {
+    toggleFullView(true);
+  }
 }
 
 document.getElementById('subtitleBtn').addEventListener('click', () => {
@@ -2216,7 +2225,13 @@ function toggleFullView(forceOff) {
 }
 
 fullscreenBtn.addEventListener('click', () => toggleFullView());
-exitFullViewBtn.addEventListener('click', () => toggleFullView(true));
+exitFullViewBtn.addEventListener('click', () => {
+  toggleFullView(true);
+  if (typeof closeSubtitles === 'function' && subtitleBar.classList.contains('active')) {
+    pauseSubtitles();
+    subtitleBar.classList.remove('active');
+  }
+});
 
 function setStatus(text) {
   statusEl.textContent = text;
