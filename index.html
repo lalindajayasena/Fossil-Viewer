@@ -266,24 +266,26 @@
     display: flex;
   }
   #subtitleText {
-    background: rgba(20,18,15,0.82);
-    color: #ffffff;
-    font-size: 15px;
+    background: none;
+    color: var(--text-primary);
+    font-size: 16px;
+    font-weight: 600;
     line-height: 1.5;
     text-align: center;
-    padding: 10px 16px;
-    border-radius: 10px;
-    box-shadow: 0 3px 14px rgba(0,0,0,0.3);
+    padding: 4px 16px;
     min-height: 22px;
+    text-shadow:
+      0 1px 3px var(--bg),
+      0 0 8px var(--bg);
   }
   #subtitleControls {
     display: flex;
     gap: 8px;
   }
   #subtitleControls button {
-    background: rgba(20,18,15,0.75);
-    color: #ffffff;
-    border: none;
+    background: var(--icon-bg);
+    color: var(--icon-text);
+    border: 1px solid var(--icon-border);
     width: 34px;
     height: 34px;
     border-radius: 50%;
@@ -291,7 +293,7 @@
     cursor: pointer;
   }
   #subtitleControls button:active {
-    background: rgba(20,18,15,0.95);
+    background: var(--icon-pressed-bg);
   }
 
   #loading {
@@ -2056,7 +2058,7 @@ let subtitleLines = [];
 let subtitleIndex = 0;
 let subtitlePlaying = false;
 let subtitleTimer = null;
-const SUBTITLE_MS_PER_LINE = 7000;
+const SUBTITLE_MS_PER_LINE = 12000;
 
 function splitIntoSubtitleLines(text) {
   if (!text) return [];
@@ -2092,7 +2094,7 @@ function playSubtitles() {
   clearInterval(subtitleTimer);
   subtitleTimer = setInterval(() => {
     if (subtitleIndex >= subtitleLines.length - 1) {
-      pauseSubtitles();
+      showSubtitleLine(0); // loop back to the start for continuous playback
       return;
     }
     stepSubtitle(true);
