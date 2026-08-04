@@ -686,9 +686,6 @@
 <div id="subtitleBar">
   <div id="subtitleText"></div>
   <div id="subtitleControls">
-    <button id="subtitlePrevBtn" title="Previous line">⏮</button>
-    <button id="subtitlePlayPauseBtn" title="Play / Pause">⏸</button>
-    <button id="subtitleNextBtn" title="Next line">⏭</button>
     <button id="subtitleCloseBtn" title="Close subtitles">✕</button>
   </div>
 </div>
@@ -2052,7 +2049,6 @@ document.getElementById('applyScaleBtn').addEventListener('click', () => {
 // while the 3D model stays fully visible and interactive underneath.
 const subtitleBar = document.getElementById('subtitleBar');
 const subtitleTextEl = document.getElementById('subtitleText');
-const subtitlePlayPauseBtn = document.getElementById('subtitlePlayPauseBtn');
 
 let subtitleLines = [];
 let subtitleIndex = 0;
@@ -2090,7 +2086,6 @@ function stepSubtitle(forward) {
 function playSubtitles() {
   if (subtitleLines.length === 0) return;
   subtitlePlaying = true;
-  subtitlePlayPauseBtn.textContent = '⏸';
   clearInterval(subtitleTimer);
   subtitleTimer = setInterval(() => {
     if (subtitleIndex >= subtitleLines.length - 1) {
@@ -2103,7 +2098,6 @@ function playSubtitles() {
 
 function pauseSubtitles() {
   subtitlePlaying = false;
-  subtitlePlayPauseBtn.textContent = '▶';
   clearInterval(subtitleTimer);
 }
 
@@ -2144,25 +2138,6 @@ document.getElementById('subtitleBtn').addEventListener('click', () => {
   } else {
     openSubtitles();
   }
-});
-
-document.getElementById('subtitlePlayPauseBtn').addEventListener('click', () => {
-  if (subtitlePlaying) {
-    pauseSubtitles();
-  } else {
-    if (subtitleIndex >= subtitleLines.length - 1) subtitleIndex = -1; // restart from beginning if at the end
-    playSubtitles();
-  }
-});
-
-document.getElementById('subtitlePrevBtn').addEventListener('click', () => {
-  pauseSubtitles();
-  stepSubtitle(false);
-});
-
-document.getElementById('subtitleNextBtn').addEventListener('click', () => {
-  pauseSubtitles();
-  stepSubtitle(true);
 });
 
 document.getElementById('subtitleCloseBtn').addEventListener('click', () => {
@@ -2221,7 +2196,11 @@ function toggleFullView(forceOff) {
   topbarEl.style.display = isFullView ? 'none' : 'block';
   hintEl.style.display = isFullView ? 'none' : 'block';
   printabilityEl.style.display = isFullView ? 'none' : (currentModel ? 'block' : 'none');
-  exitFullViewBtn.style.display = isFullView ? 'flex' : 'none';
+  // While subtitles are playing, their own close button is the single exit
+  // control — the separate full-view exit button stays hidden so there's
+  // only ever one close button on screen at a time.
+  const subtitlesActive = subtitleBar && subtitleBar.classList.contains('active');
+  exitFullViewBtn.style.display = (isFullView && !subtitlesActive) ? 'flex' : 'none';
   exitFullViewBtn.style.alignItems = 'center';
   exitFullViewBtn.style.justifyContent = 'center';
 }
