@@ -112,24 +112,27 @@
   #centerUpload.hidden {
     display: none;
   }
-  #topbarUploadBtn {
+  #topbarUploadWrap {
     display: none;
   }
-  #topbar.model-loaded #topbarUploadBtn {
+  #topbar.model-loaded #topbarUploadWrap {
     display: none; /* moved out of the top bar entirely, see #floatingUploadBtn below */
   }
-  #floatingUploadBtn {
+  #floatingUploadWrap {
     position: fixed;
     right: 16px;
     bottom: 100px;
     z-index: 16;
     display: none;
+  }
+  #floatingUploadWrap.visible {
+    display: inline-flex;
+  }
+  #floatingUploadBtn {
     padding: 12px 16px;
     border-radius: 26px;
     box-shadow: 0 3px 12px rgba(0,0,0,0.2);
     font-size: 13.5px;
-  }
-  #floatingUploadBtn.visible {
     display: inline-flex;
     align-items: center;
     gap: 6px;
@@ -149,9 +152,6 @@
     font-size: 19px;
     font-weight: 700;
     letter-spacing: 0.2px;
-  }
-  #fileInput {
-    display: none;
   }
   .btn {
     display: inline-flex;
@@ -173,7 +173,34 @@
   }
   .btn:active {
     background: var(--accent-dark);
+    transform: scale(0.96);
   }
+  .btn {
+    transition: transform 0.1s ease, background 0.1s ease;
+  }
+
+  /* Upload buttons use a real, fully transparent file input placed exactly
+     on top of the visible button. Tapping "the button" actually taps the
+     real input directly — this is the most reliable way to guarantee the
+     native file picker opens on mobile browsers, more so than a JS-driven
+     .click() call on a separate hidden input, which can be blocked or
+     delayed on some Android browser/WebView combinations. */
+  .upload-btn-wrap {
+    position: relative;
+    display: inline-block;
+  }
+  .upload-input-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+    margin: 0;
+    padding: 0;
+  }
+
   .btn-icon {
     display: inline-flex;
     align-items: center;
@@ -307,6 +334,10 @@
   }
   /* The upload button is rarely needed mid-playback — shrink it to a
      small icon-only circle, tucked out of the way. */
+  body.subtitles-active #floatingUploadWrap {
+    right: 10px;
+    bottom: 10px;
+  }
   body.subtitles-active #floatingUploadBtn {
     padding: 0;
     width: 34px;
@@ -316,8 +347,6 @@
     align-items: center;
     justify-content: center;
     overflow: hidden;
-    right: 10px;
-    bottom: 10px;
     white-space: nowrap;
   }
   body.subtitles-active #floatingUploadBtn .upload-btn-label {
@@ -577,7 +606,10 @@
 <div id="centerUpload">
   <div id="centerUploadIcon">🌱</div>
   <div id="centerUploadTitle">LDJ 3D Viewer</div>
-  <button type="button" class="btn" id="centerUploadBtn">Upload 3D Object</button>
+  <div class="upload-btn-wrap" id="centerUploadWrap">
+    <button type="button" class="btn" id="centerUploadBtn">Upload 3D Object</button>
+    <input type="file" class="upload-input-overlay" id="fileInputCenter" accept=".stl,.obj,.ply,.glb,.gltf">
+  </div>
   <div id="centerUploadHint">Supports STL, OBJ, PLY, GLB</div>
 </div>
 
@@ -586,8 +618,10 @@
     <span id="titleIcon">🌱</span>
     <span id="title">LDJ 3D Viewer</span>
   </div>
-  <button type="button" class="btn" id="topbarUploadBtn">Upload 3D Object</button>
-  <input type="file" id="fileInput" accept=".stl,.obj,.ply,.glb,.gltf">
+  <div class="upload-btn-wrap" id="topbarUploadWrap">
+    <button type="button" class="btn" id="topbarUploadBtn">Upload 3D Object</button>
+    <input type="file" class="upload-input-overlay" id="fileInputTopbar" accept=".stl,.obj,.ply,.glb,.gltf">
+  </div>
   <div id="status">No file loaded. Supports STL, OBJ, PLY, GLB.</div>
 
   <div id="toolRow" style="margin-top:10px; display:none;">
@@ -729,7 +763,10 @@
 
 <!-- Standalone button, separate from the icon toolbar, for reading the saved description -->
 <button id="readDescBtn" title="Read Description">📖</button>
-<button type="button" class="btn" id="floatingUploadBtn" title="Upload a different 3D object">📤<span class="upload-btn-label"> Upload</span></button>
+<div class="upload-btn-wrap" id="floatingUploadWrap">
+  <button type="button" class="btn" id="floatingUploadBtn" title="Upload a different 3D object">📤<span class="upload-btn-label"> Upload</span></button>
+  <input type="file" class="upload-input-overlay" id="fileInputFloating" accept=".stl,.obj,.ply,.glb,.gltf">
+</div>
 
 <!-- Full-screen description reader overlay -->
 <div id="descReaderOverlay">
@@ -780,7 +817,9 @@ window.addEventListener('unhandledrejection', (event) => {
     loadingEl.style.display = 'none';
   } catch (e) { /* ignore */ }
 });
-const fileInput = document.getElementById('fileInput');
+const fileInputCenter = document.getElementById('fileInputCenter');
+const fileInputTopbar = document.getElementById('fileInputTopbar');
+const fileInputFloating = document.getElementById('fileInputFloating');
 
 // Scene setup
 const scene = new THREE.Scene();
@@ -1382,7 +1421,7 @@ function addMeshToScene(mesh) {
   document.getElementById('toolRow').style.display = 'flex';
   document.getElementById('centerUpload').classList.add('hidden');
   document.getElementById('topbar').classList.add('model-loaded');
-  document.getElementById('floatingUploadBtn').classList.add('visible');
+  document.getElementById('floatingUploadWrap').classList.add('visible');
   updateProperties(mesh, currentFileName, currentFileSize);
 
   const printStatusEl = document.getElementById('printStatus');
@@ -2385,25 +2424,20 @@ function loadFile(file) {
   }
 }
 
-fileInput.addEventListener('change', (e) => {
+// Each upload entry point (centered welcome, top bar, floating post-upload
+// button) now has its own real, directly-tappable file input layered
+// invisibly on top of the visible button — see .upload-input-overlay CSS.
+// This avoids relying on a JS-driven click() on a separate hidden input,
+// which could be silently blocked or delayed on some Android browsers.
+function handleFileInputChange(e) {
   const file = e.target.files[0];
   if (file) loadFile(file);
   // Reset so selecting the exact same file again still fires 'change'.
   e.target.value = '';
-});
-
-// All three upload entry points (centered welcome button, top bar button,
-// floating post-upload button) trigger the same hidden file input via a
-// direct JS click() call rather than relying on multiple <label for="">
-// associations pointing at one input — that pattern was intermittently
-// unreliable on some Android browsers, silently failing to open the
-// picker or losing the selected file.
-function triggerFileUpload() {
-  fileInput.click();
 }
-document.getElementById('centerUploadBtn').addEventListener('click', triggerFileUpload);
-document.getElementById('topbarUploadBtn').addEventListener('click', triggerFileUpload);
-document.getElementById('floatingUploadBtn').addEventListener('click', triggerFileUpload);
+fileInputCenter.addEventListener('change', handleFileInputChange);
+fileInputTopbar.addEventListener('change', handleFileInputChange);
+fileInputFloating.addEventListener('change', handleFileInputChange);
 
 // Handle window resize
 window.addEventListener('resize', () => {
