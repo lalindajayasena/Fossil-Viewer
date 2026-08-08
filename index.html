@@ -167,6 +167,9 @@
     border: none;
     cursor: pointer;
     white-space: nowrap;
+    font-family: inherit;
+    -webkit-appearance: none;
+    appearance: none;
   }
   .btn:active {
     background: var(--accent-dark);
@@ -574,7 +577,7 @@
 <div id="centerUpload">
   <div id="centerUploadIcon">🌱</div>
   <div id="centerUploadTitle">LDJ 3D Viewer</div>
-  <label for="fileInput" class="btn" id="centerUploadBtn">Upload 3D Object</label>
+  <button type="button" class="btn" id="centerUploadBtn">Upload 3D Object</button>
   <div id="centerUploadHint">Supports STL, OBJ, PLY, GLB</div>
 </div>
 
@@ -583,7 +586,7 @@
     <span id="titleIcon">🌱</span>
     <span id="title">LDJ 3D Viewer</span>
   </div>
-  <label for="fileInput" class="btn" id="topbarUploadBtn">Upload 3D Object</label>
+  <button type="button" class="btn" id="topbarUploadBtn">Upload 3D Object</button>
   <input type="file" id="fileInput" accept=".stl,.obj,.ply,.glb,.gltf">
   <div id="status">No file loaded. Supports STL, OBJ, PLY, GLB.</div>
 
@@ -726,7 +729,7 @@
 
 <!-- Standalone button, separate from the icon toolbar, for reading the saved description -->
 <button id="readDescBtn" title="Read Description">📖</button>
-<label for="fileInput" class="btn" id="floatingUploadBtn" title="Upload a different 3D object">📤<span class="upload-btn-label"> Upload</span></label>
+<button type="button" class="btn" id="floatingUploadBtn" title="Upload a different 3D object">📤<span class="upload-btn-label"> Upload</span></button>
 
 <!-- Full-screen description reader overlay -->
 <div id="descReaderOverlay">
@@ -2385,7 +2388,22 @@ function loadFile(file) {
 fileInput.addEventListener('change', (e) => {
   const file = e.target.files[0];
   if (file) loadFile(file);
+  // Reset so selecting the exact same file again still fires 'change'.
+  e.target.value = '';
 });
+
+// All three upload entry points (centered welcome button, top bar button,
+// floating post-upload button) trigger the same hidden file input via a
+// direct JS click() call rather than relying on multiple <label for="">
+// associations pointing at one input — that pattern was intermittently
+// unreliable on some Android browsers, silently failing to open the
+// picker or losing the selected file.
+function triggerFileUpload() {
+  fileInput.click();
+}
+document.getElementById('centerUploadBtn').addEventListener('click', triggerFileUpload);
+document.getElementById('topbarUploadBtn').addEventListener('click', triggerFileUpload);
+document.getElementById('floatingUploadBtn').addEventListener('click', triggerFileUpload);
 
 // Handle window resize
 window.addEventListener('resize', () => {
