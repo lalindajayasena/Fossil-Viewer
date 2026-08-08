@@ -296,6 +296,40 @@
     background: var(--icon-pressed-bg);
   }
 
+  /* --- Subtitle mode: maximize the visible model area --- */
+  /* The description button isn't relevant while reading subtitles — hide
+     it completely so it can't overlap the model or the caption text. */
+  body.subtitles-active #readDescBtn {
+    display: none !important;
+  }
+  /* The upload button is rarely needed mid-playback — shrink it to a
+     small icon-only circle, tucked out of the way. */
+  body.subtitles-active #floatingUploadBtn {
+    padding: 0;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    right: 10px;
+    bottom: 10px;
+    white-space: nowrap;
+  }
+  body.subtitles-active #floatingUploadBtn .upload-btn-label {
+    display: none;
+  }
+  /* Move the subtitle bar's close button into the screen corner instead of
+     sitting inline right under the caption text, keeping the center of
+     the screen clear for the model. */
+  body.subtitles-active #subtitleControls {
+    position: fixed;
+    top: 14px;
+    right: 14px;
+    z-index: 46;
+  }
+
   #loading {
     position: fixed;
     top: 90px;
@@ -692,7 +726,7 @@
 
 <!-- Standalone button, separate from the icon toolbar, for reading the saved description -->
 <button id="readDescBtn" title="Read Description">📖</button>
-<label for="fileInput" class="btn" id="floatingUploadBtn" title="Upload a different 3D object">📤 Upload</label>
+<label for="fileInput" class="btn" id="floatingUploadBtn" title="Upload a different 3D object">📤<span class="upload-btn-label"> Upload</span></label>
 
 <!-- Full-screen description reader overlay -->
 <div id="descReaderOverlay">
@@ -2121,12 +2155,17 @@ function openSubtitles() {
     if (typeof toggleFullView === 'function' && !isFullView) {
       toggleFullView();
     }
+    // Maximize visible model area: hide the description button entirely,
+    // shrink the upload button, and let the model use the space normally
+    // reserved for the top/bottom toolbars.
+    document.body.classList.add('subtitles-active');
   });
 }
 
 function closeSubtitles() {
   pauseSubtitles();
   subtitleBar.classList.remove('active');
+  document.body.classList.remove('subtitles-active');
   if (typeof toggleFullView === 'function' && isFullView) {
     toggleFullView(true);
   }
@@ -2211,6 +2250,7 @@ exitFullViewBtn.addEventListener('click', () => {
   if (typeof closeSubtitles === 'function' && subtitleBar.classList.contains('active')) {
     pauseSubtitles();
     subtitleBar.classList.remove('active');
+    document.body.classList.remove('subtitles-active');
   }
 });
 
