@@ -171,7 +171,8 @@
     -webkit-appearance: none;
     appearance: none;
   }
-  .btn:active {
+  .btn:active,
+  .btn.pressed {
     background: var(--accent-dark);
     transform: scale(0.96);
   }
@@ -189,6 +190,11 @@
     position: relative;
     display: inline-block;
   }
+  .upload-btn-wrap .btn {
+    position: relative;
+    z-index: 1;
+    pointer-events: none;
+  }
   .upload-input-overlay {
     position: absolute;
     top: 0;
@@ -199,6 +205,8 @@
     cursor: pointer;
     margin: 0;
     padding: 0;
+    z-index: 2;
+    -webkit-tap-highlight-color: transparent;
   }
 
   .btn-icon {
@@ -2438,6 +2446,25 @@ function handleFileInputChange(e) {
 fileInputCenter.addEventListener('change', handleFileInputChange);
 fileInputTopbar.addEventListener('change', handleFileInputChange);
 fileInputFloating.addEventListener('change', handleFileInputChange);
+
+// Drive the visual "pressed" animation from the real overlay input, since
+// the visible button itself has pointer-events disabled (so taps always
+// land on the real file input, not the decorative button on top of it).
+function wirePressAnimation(inputEl) {
+  const btn = inputEl.previousElementSibling;
+  if (!btn) return;
+  const press = () => btn.classList.add('pressed');
+  const release = () => btn.classList.remove('pressed');
+  inputEl.addEventListener('touchstart', press, { passive: true });
+  inputEl.addEventListener('touchend', release);
+  inputEl.addEventListener('touchcancel', release);
+  inputEl.addEventListener('mousedown', press);
+  inputEl.addEventListener('mouseup', release);
+  inputEl.addEventListener('mouseleave', release);
+}
+wirePressAnimation(fileInputCenter);
+wirePressAnimation(fileInputTopbar);
+wirePressAnimation(fileInputFloating);
 
 // Handle window resize
 window.addEventListener('resize', () => {
