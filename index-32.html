@@ -1,0 +1,2520 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LDJ 3D Viewer</title>
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" type="image/png" href="./icon.png">
+<link rel="apple-touch-icon" href="./icon.png">
+<meta name="theme-color" content="#f2efe9" id="themeColorMeta">
+<style>
+  :root, [data-theme="light"] {
+    --bg: #f2efe9;
+    --panel-bg: #ffffff;
+    --panel-border: #e4ddcb;
+    --text-primary: #262524;
+    --text-secondary: #6b6a67;
+    --text-muted: #8a8a86;
+    --icon-bg: #f0ece3;
+    --icon-border: #ddd6c6;
+    --icon-text: #3a372f;
+    --icon-active-bg: #caa45c;
+    --icon-active-text: #1a1a1a;
+    --icon-pressed-bg: #e2dbc9;
+    --accent: #caa45c;
+    --accent-dark: #b8944e;
+    --divider: #f0ece3;
+    --overlay-bg: #f2efe9;
+    --close-btn-bg: #ece7db;
+  }
+
+  [data-theme="dark"] {
+    --bg: #1c1b19;
+    --panel-bg: #242320;
+    --panel-border: #3a382f;
+    --text-primary: #ece8dd;
+    --text-secondary: #b5b2a7;
+    --text-muted: #8f8c81;
+    --icon-bg: #2e2c27;
+    --icon-border: #423f35;
+    --icon-text: #ece8dd;
+    --icon-active-bg: #caa45c;
+    --icon-active-text: #1a1a1a;
+    --icon-pressed-bg: #3a3730;
+    --accent: #caa45c;
+    --accent-dark: #d8b874;
+    --divider: #33312b;
+    --overlay-bg: #1c1b19;
+    --close-btn-bg: #322f28;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    width: 100%;
+    height: 100%;
+    background: var(--bg);
+    font-family: -apple-system, Roboto, Arial, sans-serif;
+  }
+  #canvas-container {
+    width: 100%;
+    height: 100%;
+  }
+  #topbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    padding: 12px 14px 8px 14px;
+    box-sizing: border-box;
+    background: linear-gradient(to bottom, var(--bg) 0%, var(--bg) 70%, transparent 100%);
+    opacity: 0.97;
+    z-index: 10;
+    pointer-events: none;
+  }
+  #topbar * { pointer-events: auto; }
+
+  #centerUpload {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    z-index: 8;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+  #centerUploadIcon {
+    font-size: 52px;
+    margin-bottom: 6px;
+  }
+  #centerUploadTitle {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 14px;
+  }
+  #centerUploadBtn {
+    font-size: 16px;
+    padding: 14px 28px;
+  }
+  #centerUploadHint {
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    margin-top: 10px;
+  }
+  /* Once a model is loaded, hide the centered welcome screen and use the
+     small upload button already in the top bar instead. */
+  #centerUpload.hidden {
+    display: none;
+  }
+  #topbarUploadWrap {
+    display: none;
+  }
+  #topbar.model-loaded #topbarUploadWrap {
+    display: none; /* moved out of the top bar entirely, see #floatingUploadBtn below */
+  }
+  #floatingUploadWrap {
+    position: fixed;
+    right: 16px;
+    bottom: 100px;
+    z-index: 16;
+    display: none;
+  }
+  #floatingUploadWrap.visible {
+    display: inline-flex;
+  }
+  #floatingUploadBtn {
+    padding: 12px 16px;
+    border-radius: 26px;
+    box-shadow: 0 3px 12px rgba(0,0,0,0.2);
+    font-size: 13.5px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  #titleRow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  #titleIcon {
+    font-size: 22px;
+  }
+  #title {
+    color: var(--text-primary);
+    font-size: 19px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    background: var(--accent);
+    color: #1a1a1a;
+    padding: 9px 14px;
+    border-radius: 9px;
+    font-weight: 600;
+    font-size: 13px;
+    border: none;
+    cursor: pointer;
+    white-space: nowrap;
+    font-family: inherit;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  .btn:active,
+  .btn.pressed {
+    background: var(--accent-dark);
+    transform: scale(0.96);
+  }
+  .btn {
+    transition: transform 0.1s ease, background 0.1s ease;
+  }
+
+  /* Upload buttons use a real, fully transparent file input placed exactly
+     on top of the visible button. Tapping "the button" actually taps the
+     real input directly — this is the most reliable way to guarantee the
+     native file picker opens on mobile browsers, more so than a JS-driven
+     .click() call on a separate hidden input, which can be blocked or
+     delayed on some Android browser/WebView combinations. */
+  .upload-btn-wrap {
+    position: relative;
+    display: inline-block;
+  }
+  .upload-btn-wrap .btn {
+    position: relative;
+    z-index: 1;
+    pointer-events: none;
+  }
+  .upload-input-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+    margin: 0;
+    padding: 0;
+    z-index: 2;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .btn-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 9px;
+    background: var(--icon-bg);
+    color: var(--icon-text);
+    border: 1px solid var(--icon-border);
+    font-size: 17px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .btn-icon.active {
+    background: var(--accent);
+    color: #1a1a1a;
+    border-color: var(--accent);
+  }
+  .btn-icon:active {
+    background: var(--icon-pressed-bg);
+  }
+  #descBtn {
+    background: transparent;
+    border-color: transparent;
+  }
+  #descBtn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  #descBtn:active {
+    background: rgba(202,164,92,0.25);
+  }
+  #toolRow {
+    display: flex;
+    gap: 7px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    -webkit-overflow-scrolling: touch;
+  }
+  #status {
+    color: var(--text-secondary);
+    font-size: 12.5px;
+    margin-top: 8px;
+    min-height: 16px;
+  }
+  #hint {
+    position: fixed;
+    bottom: 40px;
+    left: 14px;
+    right: 14px;
+    color: var(--text-muted);
+    font-size: 12px;
+    text-align: center;
+    z-index: 10;
+    pointer-events: none;
+  }
+  #printStatus {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 8px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    text-align: center;
+    z-index: 10;
+    display: none;
+  }
+  #printStatus.printable {
+    background: #e8f5e9;
+    color: #2e7d32;
+  }
+  #printStatus.not-printable {
+    background: #fdecea;
+    color: #c0392b;
+  }
+
+  #subtitleBar {
+    position: fixed;
+    left: 50%;
+    top: 18px;
+    bottom: auto;
+    transform: translateX(-50%);
+    width: min(90%, 480px);
+    z-index: 45;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+  #subtitleBar.active {
+    display: flex;
+  }
+  #subtitleText {
+    background: none;
+    color: var(--text-primary);
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.5;
+    text-align: center;
+    padding: 4px 16px;
+    min-height: 22px;
+    text-shadow:
+      0 1px 3px var(--bg),
+      0 0 8px var(--bg);
+  }
+  #subtitleControls {
+    display: flex;
+    gap: 8px;
+  }
+  #subtitleControls button {
+    background: var(--icon-bg);
+    color: var(--icon-text);
+    border: 1px solid var(--icon-border);
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  #subtitleControls button:active {
+    background: var(--icon-pressed-bg);
+  }
+
+  /* --- Subtitle mode: maximize the visible model area --- */
+  /* The description button isn't relevant while reading subtitles — hide
+     it completely so it can't overlap the model or the caption text. */
+  body.subtitles-active #readDescBtn {
+    display: none !important;
+  }
+  /* The upload button is rarely needed mid-playback — shrink it to a
+     small icon-only circle, tucked out of the way. */
+  body.subtitles-active #floatingUploadWrap {
+    right: 10px;
+    bottom: 10px;
+  }
+  body.subtitles-active #floatingUploadBtn {
+    padding: 0;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  body.subtitles-active #floatingUploadBtn .upload-btn-label {
+    display: none;
+  }
+  /* Move the subtitle bar's close button to the bottom-left corner — clear
+     of the caption text at the top, and clear of the upload button which
+     also lives in the bottom-right during subtitle mode. Semi-transparent
+     so it stays unobtrusive while still easy to find and tap. */
+  body.subtitles-active #subtitleControls {
+    position: fixed;
+    top: auto;
+    bottom: 14px;
+    left: 14px;
+    right: auto;
+    z-index: 46;
+  }
+  body.subtitles-active #subtitleControls button {
+    opacity: 0.45;
+    background: var(--panel-bg);
+  }
+  body.subtitles-active #subtitleControls button:active {
+    opacity: 0.9;
+  }
+
+  #loading {
+    position: fixed;
+    top: 90px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(88%, 380px);
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 14px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    padding: 16px;
+    box-sizing: border-box;
+    z-index: 30;
+    display: none;
+    text-align: center;
+  }
+  #loadingText {
+    font-size: 14.5px;
+    font-weight: 700;
+    color: var(--accent-dark);
+    margin-bottom: 10px;
+  }
+  #loadingInstructions {
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--text-secondary);
+    text-align: left;
+  }
+
+  /* Standalone "Read Description" button — separate from the icon toolbar,
+     fixed near the bottom of the screen, above the printability bar. */
+  #readDescBtn {
+    position: fixed;
+    left: 50%;
+    top: auto;
+    bottom: 46px;
+    transform: translateX(-50%);
+    background: transparent;
+    color: var(--icon-text);
+    border: none;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    font-size: 22px;
+    box-shadow: none;
+    z-index: 40;
+    display: none;
+    touch-action: none;
+    cursor: grab;
+  }
+  #readDescBtn.dragging {
+    cursor: grabbing;
+    background: rgba(58,55,47,0.15);
+  }
+  #readDescBtn:active {
+    background: rgba(58,55,47,0.12);
+  }
+  #readDescBtn.visible {
+    display: block;
+  }
+
+  /* Full-screen description reader */
+  #descReaderOverlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: var(--bg);
+    z-index: 50;
+    display: none;
+    flex-direction: column;
+  }
+  #descReaderOverlay.open {
+    display: flex;
+  }
+  #descReaderHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 16px;
+    border-bottom: 1px solid var(--panel-border);
+    flex-shrink: 0;
+  }
+  #descReaderTitle {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+  #descReaderClose {
+    background: var(--close-btn-bg);
+    border: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    font-size: 16px;
+    color: var(--icon-text);
+  }
+  #descReaderBody {
+    flex: 1;
+    overflow-y: auto;
+    padding: 18px 20px 40px 20px;
+    font-size: 15.5px;
+    line-height: 1.6;
+    color: var(--icon-text);
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+  #descReaderBody.empty {
+    color: #9a988f;
+    font-style: italic;
+  }
+  .panel {
+    position: fixed;
+    left: 14px;
+    right: 14px;
+    bottom: 14px;
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 14px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.15);
+    padding: 14px;
+    box-sizing: border-box;
+    z-index: 25;
+    display: none;
+    max-height: 50vh;
+    overflow-y: auto;
+  }
+  .panel.open {
+    display: block;
+  }
+  .panel-title {
+    font-size: 14.5px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .panel-close {
+    background: var(--close-btn-bg);
+    border: none;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    font-size: 14px;
+    color: var(--icon-text);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .color-swatch-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .color-swatch {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 2px solid var(--icon-border);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .color-swatch.selected {
+    border-color: var(--text-primary);
+    border-width: 3px;
+  }
+  .slider-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 8px;
+  }
+  .slider-row input[type=range] {
+    flex: 1;
+  }
+  .slider-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    min-width: 70px;
+    flex-shrink: 0;
+  }
+  #propsTable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  #propsTable td {
+    padding: 6px 4px;
+    border-bottom: 1px solid var(--icon-bg);
+    color: var(--icon-text);
+  }
+  #propsTable td:first-child {
+    color: var(--text-muted);
+    width: 45%;
+  }
+  #measureResult {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-top: 8px;
+    min-height: 20px;
+  }
+  .reorder-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 4px;
+    border-bottom: 1px solid var(--icon-bg);
+  }
+  .reorder-icon {
+    width: 32px;
+    text-align: center;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+  .reorder-name {
+    flex: 1;
+    font-size: 13.5px;
+    color: var(--icon-text);
+  }
+  .reorder-arrow {
+    background: var(--icon-bg);
+    border: 1px solid var(--icon-border);
+    border-radius: 6px;
+    width: 30px;
+    height: 30px;
+    font-size: 14px;
+    color: var(--icon-text);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .reorder-arrow:disabled {
+    opacity: 0.3;
+  }
+</style>
+</head>
+<body>
+
+<div id="canvas-container"></div>
+
+<!-- Centered "no model yet" welcome screen — this is the main, easy-to-reach
+     way to upload a file, both on first open and whenever nothing is loaded. -->
+<div id="centerUpload">
+  <div id="centerUploadIcon">🌱</div>
+  <div id="centerUploadTitle">LDJ 3D Viewer</div>
+  <div class="upload-btn-wrap" id="centerUploadWrap">
+    <button type="button" class="btn" id="centerUploadBtn">Upload 3D Object</button>
+    <input type="file" class="upload-input-overlay" id="fileInputCenter" accept=".stl,.obj,.ply,.glb,.gltf">
+  </div>
+  <div id="centerUploadHint">Supports STL, OBJ, PLY, GLB</div>
+</div>
+
+<div id="topbar">
+  <div id="titleRow">
+    <span id="titleIcon">🌱</span>
+    <span id="title">LDJ 3D Viewer</span>
+  </div>
+  <div class="upload-btn-wrap" id="topbarUploadWrap">
+    <button type="button" class="btn" id="topbarUploadBtn">Upload 3D Object</button>
+    <input type="file" class="upload-input-overlay" id="fileInputTopbar" accept=".stl,.obj,.ply,.glb,.gltf">
+  </div>
+  <div id="status">No file loaded. Supports STL, OBJ, PLY, GLB.</div>
+
+  <div id="toolRow" style="margin-top:10px; display:none;">
+    <button class="btn-icon" id="flipXBtn" title="Flip horizontal">↔</button>
+    <button class="btn-icon" id="flipYBtn" title="Flip vertical">↕</button>
+    <button class="btn-icon" id="resetBtn" title="Reset view">⟳</button>
+    <button class="btn-icon" id="viewCycleBtn" title="Front view">⬤</button>
+    <button class="btn-icon" id="measureBtn" title="Measure distance">📏</button>
+    <button class="btn-icon" id="sliceBtn" title="Slice view">◐</button>
+    <button class="btn-icon" id="colorBtn" title="Change color">🎨</button>
+    <button class="btn-icon" id="propsBtn" title="Properties">ℹ</button>
+    <button class="btn-icon" id="descBtn" title="Description">📝</button>
+    <button class="btn-icon" id="customizeBtn" title="Customize toolbar">⚙</button>
+    <button class="btn-icon" id="scaleBtn" title="Set real-world scale">📐</button>
+    <button class="btn-icon" id="subtitleBtn" title="Play description as subtitles">💬</button>
+    <button class="btn-icon" id="invertRotateBtn" title="Flip rotation direction">⇄</button>
+    <button class="btn-icon" id="themeToggleBtn" title="Toggle dark mode">🌙</button>
+    <button class="btn-icon" id="fullscreenBtn" title="Full view">⛶</button>
+  </div>
+</div>
+
+<!-- Measure panel -->
+<div class="panel" id="measurePanel">
+  <div class="panel-title">Measure Distance <button class="panel-close" data-close="measurePanel">✕</button></div>
+  <div style="font-size:13px; color:var(--text-secondary);">Tap two points on the fossil to measure the distance between them.</div>
+  <div id="measureResult">No points selected.</div>
+  <button class="btn" id="measureClearBtn" style="margin-top:10px;">Clear Points</button>
+</div>
+
+<!-- Slice panel -->
+<div class="panel" id="slicePanel">
+  <div class="panel-title">Slice View <button class="panel-close" data-close="slicePanel">✕</button></div>
+  <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--icon-text);">
+    <input type="checkbox" id="sliceToggle"> Enable slicing
+  </label>
+  <div class="slider-row">
+    <span class="slider-label">Axis</span>
+    <select id="sliceAxis" style="flex:1; padding:6px;">
+      <option value="x">X</option>
+      <option value="y" selected>Y</option>
+      <option value="z">Z</option>
+    </select>
+  </div>
+  <div class="slider-row">
+    <span class="slider-label">Position</span>
+    <input type="range" id="slicePos" min="-100" max="100" value="0">
+  </div>
+  <div class="slider-row">
+    <span class="slider-label">Flip side</span>
+    <input type="checkbox" id="sliceFlip">
+  </div>
+</div>
+
+<!-- Color panel -->
+<div class="panel" id="colorPanel">
+  <div class="panel-title">Fossil Color <button class="panel-close" data-close="colorPanel">✕</button></div>
+  <div class="color-swatch-row" id="colorSwatches"></div>
+  <div style="margin-top:14px; padding-top:12px; border-top:1px solid var(--icon-bg); display:flex; align-items:center; gap:10px;">
+    <span style="font-size:13px; color:var(--text-secondary);">Custom color:</span>
+    <input type="color" id="customColorPicker" value="#b89968" style="width:44px; height:36px; border:none; border-radius:8px; cursor:pointer;">
+  </div>
+</div>
+
+<!-- Properties panel -->
+<div class="panel" id="propsPanel">
+  <div class="panel-title">Properties <button class="panel-close" data-close="propsPanel">✕</button></div>
+  <table id="propsTable"></table>
+</div>
+
+<!-- Description panel -->
+<div class="panel" id="descPanel">
+  <div class="panel-title">Description <button class="panel-close" data-close="descPanel">✕</button></div>
+  <textarea id="descText" placeholder="Write notes about this fossil — species, locality, age, source, anything you want to remember." style="width:100%; min-height:120px; box-sizing:border-box; padding:10px; border-radius:8px; border:1px solid var(--icon-border); font-family:inherit; font-size:14px; resize:vertical; background:var(--panel-bg); color:var(--text-primary);"></textarea>
+  <button class="btn" id="descSaveBtn" style="margin-top:10px;">Save Description</button>
+  <div id="descSavedNote" style="font-size:12px; color:var(--text-secondary); margin-top:6px;"></div>
+  <div style="border-top:1px solid var(--icon-bg); margin-top:14px; padding-top:12px;">
+    <div style="font-size:12px; color:var(--text-secondary); margin-bottom:8px;">
+      Descriptions are stored on this device only. Back them up occasionally so they survive a browser data clear or a new phone.
+    </div>
+    <button class="btn" id="descBackupBtn" style="margin-right:6px;">⬇ Backup All</button>
+    <label for="descRestoreInput" class="btn" style="display:inline-block;">⬆ Restore</label>
+    <input type="file" id="descRestoreInput" accept=".json" style="display:none;">
+    <div id="descBackupNote" style="font-size:12px; color:var(--text-secondary); margin-top:6px;"></div>
+  </div>
+</div>
+
+<!-- Customize toolbar panel -->
+<div class="panel" id="customizePanel">
+  <div class="panel-title">Customize Toolbar Order <button class="panel-close" data-close="customizePanel">✕</button></div>
+  <div style="font-size:12.5px; color:var(--text-secondary); margin-bottom:10px;">Use the arrows to move a button earlier or later in the toolbar.</div>
+  <div id="customizeList"></div>
+</div>
+
+<!-- Real-world scale panel -->
+<div class="panel" id="scalePanel">
+  <div class="panel-title">Set Real-World Scale <button class="panel-close" data-close="scalePanel">✕</button></div>
+  <div style="font-size:12.5px; color:var(--text-secondary); margin-bottom:10px;">
+    If you know the true size of this fossil, enter it here. Use Measure first to select two points, then enter what that distance actually is in real life — every future measurement on this file will be corrected to match.
+  </div>
+  <div class="slider-row">
+    <span class="slider-label">Real distance</span>
+    <input type="number" id="realDistanceInput" placeholder="e.g. 300" style="flex:1; padding:8px; border-radius:6px; border:1px solid var(--icon-border); background:var(--panel-bg); color:var(--text-primary);">
+    <select id="realDistanceUnit" style="padding:8px; border-radius:6px; border:1px solid var(--icon-border); background:var(--panel-bg); color:var(--text-primary);">
+      <option value="mm">mm</option>
+      <option value="cm" selected>cm</option>
+      <option value="m">m</option>
+      <option value="in">in</option>
+    </select>
+  </div>
+  <button class="btn" id="applyScaleBtn" style="margin-top:10px;">Apply Scale</button>
+  <div id="scaleStatus" style="font-size:12px; color:var(--text-secondary); margin-top:8px;"></div>
+</div>
+
+<div id="loading">
+  <div id="loadingText">Please wait, your 3D object is being uploaded...</div>
+  <div id="loadingInstructions">
+    <strong>How to use LDJ 3D Viewer:</strong><br>
+    • Drag with one finger to rotate the model<br>
+    • Pinch with two fingers to zoom in and out<br>
+    • Double-tap a point on the fossil to re-centre rotation there<br>
+    • Use the toolbar icons to flip, cycle views, measure, slice, recolor, and view properties<br>
+    • Tap 📝 to write notes, and 📖 (bottom) to read them anytime<br>
+    • Tap ⚙ to reorder your toolbar icons<br>
+    • Tap 📐 after measuring two points to set the fossil's real-world size
+  </div>
+</div>
+<div id="hint">Drag to rotate · Pinch to zoom · Double-tap to re-center</div>
+<div id="printStatus"></div>
+
+<!-- Movie-style subtitle overlay for playing a saved description while
+     freely viewing the model — the 3D view stays fully interactive
+     underneath, this just floats text over it. -->
+<div id="subtitleBar">
+  <div id="subtitleText"></div>
+  <div id="subtitleControls">
+    <button id="subtitleCloseBtn" title="Close subtitles">✕</button>
+  </div>
+</div>
+
+<!-- Standalone button, separate from the icon toolbar, for reading the saved description -->
+<button id="readDescBtn" title="Read Description">📖</button>
+<div class="upload-btn-wrap" id="floatingUploadWrap">
+  <button type="button" class="btn" id="floatingUploadBtn" title="Upload a different 3D object">📤<span class="upload-btn-label"> Upload</span></button>
+  <input type="file" class="upload-input-overlay" id="fileInputFloating" accept=".stl,.obj,.ply,.glb,.gltf">
+</div>
+
+<!-- Full-screen description reader overlay -->
+<div id="descReaderOverlay">
+  <div id="descReaderHeader">
+    <span id="descReaderTitle">Description</span>
+    <button id="descReaderClose">✕</button>
+  </div>
+  <div id="descReaderBody"></div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+const container = document.getElementById('canvas-container');
+const statusEl = document.getElementById('status');
+const loadingEl = document.getElementById('loading');
+
+// Show any uncaught JS error directly on screen. Errors during file loading
+// were previously invisible — the app would just do nothing — making bugs
+// impossible to diagnose from a description alone. This surfaces the real
+// error message so problems can be found and fixed precisely.
+window.addEventListener('error', (event) => {
+  try {
+    statusEl.textContent = 'Error: ' + (event.message || 'unknown error') +
+      (event.filename ? ' (line ' + event.lineno + ')' : '');
+    statusEl.style.color = '#c0392b';
+    loadingEl.style.display = 'none';
+  } catch (e) { /* if even this fails, there's nothing more we can do */ }
+});
+window.addEventListener('unhandledrejection', (event) => {
+  try {
+    statusEl.textContent = 'Error: ' + (event.reason && event.reason.message ? event.reason.message : String(event.reason));
+    statusEl.style.color = '#c0392b';
+    loadingEl.style.display = 'none';
+  } catch (e) { /* ignore */ }
+});
+const fileInputCenter = document.getElementById('fileInputCenter');
+const fileInputTopbar = document.getElementById('fileInputTopbar');
+const fileInputFloating = document.getElementById('fileInputFloating');
+
+// Scene setup
+const scene = new THREE.Scene();
+// Theme is explicitly controlled by the app (not auto-detected from the
+// browser), since some mobile browsers force a dark web-page theme
+// independently of the phone's actual system dark mode setting, which
+// caused the app to appear dark even when the device was in light mode.
+let currentTheme = 'light';
+try {
+  const savedTheme = localStorage.getItem('ldjTheme');
+  if (savedTheme === 'light' || savedTheme === 'dark') currentTheme = savedTheme;
+} catch (e) { /* default to light */ }
+
+function applyTheme(theme) {
+  currentTheme = theme;
+  document.documentElement.setAttribute('data-theme', theme);
+  document.getElementById('themeColorMeta').setAttribute('content', theme === 'dark' ? '#1c1b19' : '#f2efe9');
+  scene.background = new THREE.Color(theme === 'dark' ? 0x1c1b19 : 0xf2efe9);
+  try { localStorage.setItem('ldjTheme', theme); } catch (e) { /* ignore */ }
+}
+
+applyTheme(currentTheme);
+
+const camera = new THREE.PerspectiveCamera(
+  50, window.innerWidth / window.innerHeight, 0.01, 5000
+);
+camera.position.set(0, 0, 5);
+
+// Light attached to camera so the model is always lit, no matter how it's rotated
+const cameraLight = new THREE.PointLight(0xffffff, 0.8, 0, 0.3);
+camera.add(cameraLight);
+scene.add(camera);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.9;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+container.appendChild(renderer.domElement);
+
+// Lights
+scene.add(new THREE.AmbientLight(0xffffff, 0.45));
+
+// Key light — strong, low-angle, casts shadows to reveal surface relief
+const keyLight = new THREE.DirectionalLight(0xfff2dd, 1.8);
+keyLight.position.set(6, 4, 8);
+keyLight.castShadow = true;
+keyLight.shadow.mapSize.set(1024, 1024);
+keyLight.shadow.camera.near = 0.1;
+keyLight.shadow.camera.far = 50;
+keyLight.shadow.camera.left = -5;
+keyLight.shadow.camera.right = 5;
+keyLight.shadow.camera.top = 5;
+keyLight.shadow.camera.bottom = -5;
+keyLight.shadow.bias = -0.0005;
+scene.add(keyLight);
+
+// Raking light from the side — brings out fine surface cracks/relief via shadow contrast
+const rakingLight1 = new THREE.DirectionalLight(0xfff4e0, 1.1);
+rakingLight1.position.set(9, 0.5, 0);
+scene.add(rakingLight1);
+const rakingLight2 = new THREE.DirectionalLight(0xe0eaff, 0.8);
+rakingLight2.position.set(-9, 0.5, 1);
+scene.add(rakingLight2);
+const topLight = new THREE.DirectionalLight(0xffffff, 0.7);
+topLight.position.set(0, 9, 1);
+scene.add(topLight);
+
+const fillLight = new THREE.HemisphereLight(0xffffff, 0x555555, 0.5);
+scene.add(fillLight);
+
+// Controls
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = false;
+controls.autoRotate = false;
+controls.autoRotateSpeed = 0;
+controls.rotateSpeed = 0.9;
+controls.zoomSpeed = 0.8;
+controls.panSpeed = 0.8;
+controls.enablePan = true;
+controls.screenSpacePanning = true;
+controls.minDistance = 0.001;
+controls.maxDistance = 10000;
+controls.touches = {
+  ONE: THREE.TOUCH.ROTATE,
+  TWO: THREE.TOUCH.DOLLY_PAN
+};
+
+// --- Trackball-style rotation (rebuilt from scratch) ---
+// The previous approach manipulated the camera's spherical coordinates and
+// "up" vector directly, which is fragile: it can develop inconsistent
+// behavior near the poles or after camera.up gets changed elsewhere (e.g.
+// the Top/Bottom view buttons), causing different parts of the model to
+// rotate in different directions during the same drag.
+//
+// This version avoids that entire class of bug: instead of moving the
+// camera, we rotate the MODEL itself using quaternions built directly from
+// screen-space drag deltas. Quaternion rotation has no poles and no gimbal
+// lock, so the top and bottom of the model always move consistently with
+// the same drag gesture, no matter the current orientation.
+controls.enableRotate = false;
+
+let isDragging = false;
+let lastDragX = 0;
+let lastDragY = 0;
+let shadowResumeTimer = null;
+const ROTATE_SENSITIVITY = 0.01;
+
+// Single direction flag — flip with the toolbar button if rotation ever
+// feels backwards. Saved so the choice sticks between sessions.
+let rotationInverted = false;
+try {
+  const saved = localStorage.getItem('ldjRotationInvertedV3');
+  rotationInverted = saved === 'true';
+} catch (e) { /* default to false */ }
+
+function toggleRotationDirection() {
+  rotationInverted = !rotationInverted;
+  try {
+    localStorage.setItem('ldjRotationInvertedV3', rotationInverted ? 'true' : 'false');
+  } catch (e) { /* ignore storage errors */ }
+}
+// Old function names kept as harmless aliases in case anything else calls them.
+function toggleVerticalRotateDirection() { toggleRotationDirection(); }
+function toggleHorizontalRotateDirection() { /* no-op, kept for compatibility */ }
+
+function handleDragRotate(dx, dy) {
+  if (!currentModel) return;
+
+  const sign = rotationInverted ? -1 : 1;
+
+  // Dragging the model directly: your finger moving right should pull the
+  // near side of the model to the right (spinning it to match your hand),
+  // and your finger moving up should pull the near side up and over.
+  // Written explicitly with no hidden sign confusion — `sign` is the ONLY
+  // multiplier that changes direction, controlled by the ⇄ toolbar button.
+  const yawAngle = dx * ROTATE_SENSITIVITY * sign;
+  const pitchAngle = dy * ROTATE_SENSITIVITY * sign;
+
+  const yawQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yawAngle);
+
+  const camRight = new THREE.Vector3();
+  camera.getWorldDirection(new THREE.Vector3()); // ensure matrix is current
+  camRight.setFromMatrixColumn(camera.matrixWorld, 0).normalize();
+  const pitchQuat = new THREE.Quaternion().setFromAxisAngle(camRight, pitchAngle);
+
+  // Rotate around the model's own visual center, not its local origin,
+  // so it spins in place rather than swinging around a corner.
+  const box = new THREE.Box3().setFromObject(currentModel);
+  const center = box.getCenter(new THREE.Vector3());
+
+  currentModel.position.sub(center);
+  currentModel.position.applyQuaternion(yawQuat).applyQuaternion(pitchQuat);
+  currentModel.position.add(center);
+
+  currentModel.quaternion.premultiply(yawQuat).premultiply(pitchQuat);
+
+  // Temporarily disable expensive shadow recalculation while actively
+  // dragging large meshes — this is the single biggest per-frame cost,
+  // and pausing it during motion meaningfully reduces lag on lower-end
+  // phones. Shadows re-enable a moment after you stop moving.
+  renderer.shadowMap.autoUpdate = false;
+  clearTimeout(shadowResumeTimer);
+  shadowResumeTimer = setTimeout(() => {
+    renderer.shadowMap.autoUpdate = true;
+    renderer.shadowMap.needsUpdate = true;
+  }, 150);
+}
+
+let activePointerCount = 0;
+
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  activePointerCount++;
+  if (interactionMode === 'measure') return;
+  if (activePointerCount > 1) { isDragging = false; return; }
+  isDragging = true;
+  lastDragX = e.clientX;
+  lastDragY = e.clientY;
+});
+
+renderer.domElement.addEventListener('pointermove', (e) => {
+  if (!isDragging || activePointerCount > 1) return;
+  if (interactionMode === 'measure') return;
+  const dx = e.clientX - lastDragX;
+  const dy = e.clientY - lastDragY;
+  lastDragX = e.clientX;
+  lastDragY = e.clientY;
+  handleDragRotate(dx, dy);
+});
+
+window.addEventListener('pointerup', () => {
+  activePointerCount = Math.max(0, activePointerCount - 1);
+  isDragging = false;
+});
+window.addEventListener('pointercancel', () => {
+  activePointerCount = 0;
+  isDragging = false;
+});
+
+let currentModel = null;
+
+// ---------- DESCRIPTION STORAGE (IndexedDB, works fully offline) ----------
+let descDB = null;
+const DESC_DB_NAME = 'fossilViewerDB';
+const DESC_STORE_NAME = 'descriptions';
+
+function openDescDB() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DESC_DB_NAME, 1);
+    request.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(DESC_STORE_NAME)) {
+        db.createObjectStore(DESC_STORE_NAME, { keyPath: 'fileName' });
+      }
+    };
+    request.onsuccess = (e) => resolve(e.target.result);
+    request.onerror = (e) => reject(e);
+  });
+}
+
+// Shared promise every save/get call waits on, so a save attempted before
+// the database finishes opening no longer silently fails.
+const descDBReady = openDescDB().then((db) => {
+  descDB = db;
+  return db;
+}).catch((err) => {
+  console.warn('Could not open description storage:', err);
+  return null;
+});
+
+function saveDescription(fileName, text) {
+  if (!fileName) return Promise.resolve(false);
+  return descDBReady.then((db) => {
+    if (!db) return false;
+    return new Promise((resolve) => {
+      const tx = db.transaction(DESC_STORE_NAME, 'readwrite');
+      tx.objectStore(DESC_STORE_NAME).put({ fileName, text, savedAt: Date.now() });
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(false);
+    });
+  });
+}
+
+function getDescription(fileName) {
+  if (!fileName) return Promise.resolve('');
+  return descDBReady.then((db) => {
+    if (!db) return '';
+    return new Promise((resolve) => {
+      const tx = db.transaction(DESC_STORE_NAME, 'readonly');
+      const req = tx.objectStore(DESC_STORE_NAME).get(fileName);
+      req.onsuccess = () => resolve(req.result ? req.result.text : '');
+      req.onerror = () => resolve('');
+    });
+  });
+}
+
+function loadDescriptionForCurrentFile() {
+  const textEl = document.getElementById('descText');
+  const noteEl = document.getElementById('descSavedNote');
+  if (!currentFileName) {
+    textEl.value = '';
+    noteEl.textContent = 'Load a fossil file first.';
+    return;
+  }
+  noteEl.textContent = 'Loading...';
+  getDescription(currentFileName).then((text) => {
+    textEl.value = text || '';
+    noteEl.textContent = text ? 'Saved description found for this file.' : 'No description saved yet for this file.';
+  });
+}
+
+document.getElementById('descSaveBtn').addEventListener('click', () => {
+  const textEl = document.getElementById('descText');
+  const noteEl = document.getElementById('descSavedNote');
+  if (!currentFileName) {
+    noteEl.textContent = 'Load a fossil file first.';
+    return;
+  }
+  noteEl.textContent = 'Saving...';
+  saveDescription(currentFileName, textEl.value).then((success) => {
+    if (success) {
+      noteEl.textContent = 'Saved ✓ — this will reappear next time you load "' + currentFileName + '".';
+    } else {
+      noteEl.textContent = 'Could not save — storage may be unavailable on this device/browser.';
+    }
+    refreshReadDescButton();
+  });
+});
+
+// ---------- DESCRIPTION BACKUP / RESTORE ----------
+// Descriptions live in this browser's IndexedDB only. That storage can be
+// wiped by clearing browser/site data, low device storage, or switching
+// phones — none of which touch this backup file once it's downloaded.
+function getAllDescriptions() {
+  return descDBReady.then((db) => {
+    if (!db) return [];
+    return new Promise((resolve) => {
+      const tx = db.transaction(DESC_STORE_NAME, 'readonly');
+      const store = tx.objectStore(DESC_STORE_NAME);
+      const request = store.getAll();
+      request.onsuccess = () => resolve(request.result || []);
+      request.onerror = () => resolve([]);
+    });
+  });
+}
+
+document.getElementById('descBackupBtn').addEventListener('click', () => {
+  const noteEl = document.getElementById('descBackupNote');
+  noteEl.textContent = 'Preparing backup...';
+  getAllDescriptions().then((entries) => {
+    if (entries.length === 0) {
+      noteEl.textContent = 'No saved descriptions to back up yet.';
+      return;
+    }
+    const payload = {
+      app: 'LDJ 3D Viewer',
+      exportedAt: new Date().toISOString(),
+      descriptions: entries
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'ldj-viewer-descriptions-backup.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    noteEl.textContent = 'Backup downloaded ✓ (' + entries.length + ' description' + (entries.length === 1 ? '' : 's') + ')';
+  });
+});
+
+document.getElementById('descRestoreInput').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  const noteEl = document.getElementById('descBackupNote');
+  if (!file) return;
+
+  noteEl.textContent = 'Restoring...';
+  const reader = new FileReader();
+  reader.onload = (evt) => {
+    try {
+      const payload = JSON.parse(evt.target.result);
+      const entries = Array.isArray(payload.descriptions) ? payload.descriptions : [];
+      if (entries.length === 0) {
+        noteEl.textContent = 'That file has no descriptions in it.';
+        return;
+      }
+      Promise.all(entries.map((entry) => saveDescription(entry.fileName, entry.text)))
+        .then(() => {
+          noteEl.textContent = 'Restored ✓ (' + entries.length + ' description' + (entries.length === 1 ? '' : 's') + ')';
+          refreshReadDescButton();
+          if (currentFileName) loadDescriptionForCurrentFile();
+        });
+    } catch (err) {
+      noteEl.textContent = 'Could not read that backup file.';
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+});
+
+
+
+// ---------- STANDALONE "READ DESCRIPTION" BUTTON (separate from the toolbar) ----------
+const readDescBtn = document.getElementById('readDescBtn');
+const descReaderOverlay = document.getElementById('descReaderOverlay');
+const descReaderBody = document.getElementById('descReaderBody');
+const descReaderTitle = document.getElementById('descReaderTitle');
+
+function refreshReadDescButton() {
+  if (!currentFileName) {
+    readDescBtn.classList.remove('visible');
+    return;
+  }
+  getDescription(currentFileName).then((text) => {
+    if (text && text.trim().length > 0) {
+      readDescBtn.classList.add('visible');
+    } else {
+      readDescBtn.classList.remove('visible');
+    }
+  });
+}
+
+// ---------- DRAGGABLE DESCRIPTION BUTTON ----------
+const READ_DESC_POS_KEY = 'ldjReadDescBtnPos';
+
+function applyReadDescBtnPosition(x, y) {
+  readDescBtn.style.left = x + 'px';
+  readDescBtn.style.top = y + 'px';
+  readDescBtn.style.bottom = 'auto';
+  readDescBtn.style.transform = 'none';
+}
+
+function clampToScreen(x, y) {
+  const size = 44;
+  const margin = 4;
+  const maxX = window.innerWidth - size - margin;
+  const maxY = window.innerHeight - size - margin;
+  return {
+    x: Math.min(Math.max(x, margin), Math.max(maxX, margin)),
+    y: Math.min(Math.max(y, margin), Math.max(maxY, margin))
+  };
+}
+
+function loadSavedReadDescBtnPosition() {
+  try {
+    const saved = localStorage.getItem(READ_DESC_POS_KEY);
+    if (saved) {
+      const { x, y } = JSON.parse(saved);
+      const clamped = clampToScreen(x, y);
+      applyReadDescBtnPosition(clamped.x, clamped.y);
+    }
+  } catch (e) { /* keep default position */ }
+}
+
+function saveReadDescBtnPosition(x, y) {
+  try {
+    localStorage.setItem(READ_DESC_POS_KEY, JSON.stringify({ x, y }));
+  } catch (e) { /* ignore storage errors */ }
+}
+
+let descBtnDragging = false;
+let descBtnMoved = false;
+let descBtnDragOffsetX = 0;
+let descBtnDragOffsetY = 0;
+let descBtnPointerStartX = 0;
+let descBtnPointerStartY = 0;
+const DESC_BTN_DRAG_THRESHOLD = 10; // pixels of movement before it counts as a real drag, not tap jitter
+
+readDescBtn.addEventListener('pointerdown', (e) => {
+  descBtnDragging = true;
+  descBtnMoved = false;
+  descBtnPointerStartX = e.clientX;
+  descBtnPointerStartY = e.clientY;
+  const rect = readDescBtn.getBoundingClientRect();
+  descBtnDragOffsetX = e.clientX - rect.left;
+  descBtnDragOffsetY = e.clientY - rect.top;
+  readDescBtn.classList.add('dragging');
+  e.preventDefault();
+});
+
+window.addEventListener('pointermove', (e) => {
+  if (!descBtnDragging) return;
+  const distMoved = Math.hypot(e.clientX - descBtnPointerStartX, e.clientY - descBtnPointerStartY);
+  if (distMoved < DESC_BTN_DRAG_THRESHOLD) return; // still within tap tolerance, not a real drag yet
+  descBtnMoved = true;
+  const newX = e.clientX - descBtnDragOffsetX;
+  const newY = e.clientY - descBtnDragOffsetY;
+  const clamped = clampToScreen(newX, newY);
+  applyReadDescBtnPosition(clamped.x, clamped.y);
+});
+
+window.addEventListener('pointerup', (e) => {
+  if (!descBtnDragging) return;
+  descBtnDragging = false;
+  readDescBtn.classList.remove('dragging');
+  if (descBtnMoved) {
+    const rect = readDescBtn.getBoundingClientRect();
+    saveReadDescBtnPosition(rect.left, rect.top);
+  }
+});
+
+loadSavedReadDescBtnPosition();
+window.addEventListener('resize', () => {
+  const rect = readDescBtn.getBoundingClientRect();
+  const clamped = clampToScreen(rect.left, rect.top);
+  applyReadDescBtnPosition(clamped.x, clamped.y);
+});
+
+readDescBtn.addEventListener('click', (e) => {
+  if (descBtnMoved) {
+    // This click was the tail end of a drag, not a tap — ignore it.
+    descBtnMoved = false;
+    return;
+  }
+  if (!currentFileName) return;
+  getDescription(currentFileName).then((text) => {
+    descReaderTitle.textContent = currentFileName;
+    if (text && text.trim().length > 0) {
+      descReaderBody.textContent = text;
+      descReaderBody.classList.remove('empty');
+    } else {
+      descReaderBody.textContent = 'No description saved for this file yet.';
+      descReaderBody.classList.add('empty');
+    }
+    descReaderOverlay.classList.add('open');
+    renderingPaused = true;
+  });
+});
+
+document.getElementById('descReaderClose').addEventListener('click', () => {
+  descReaderOverlay.classList.remove('open');
+  renderer.shadowMap.autoUpdate = false;
+  renderingPaused = false;
+  setTimeout(() => {
+    renderer.shadowMap.autoUpdate = true;
+    renderer.shadowMap.needsUpdate = true;
+  }, 100);
+});
+let currentFileName = '';
+let currentFileSize = 0;
+
+function clearCurrentModel() {
+  if (currentModel) {
+    scene.remove(currentModel);
+    currentModel.traverse((child) => {
+      if (child.geometry) child.geometry.dispose();
+      if (child.material) {
+        if (Array.isArray(child.material)) {
+          child.material.forEach(m => m.dispose());
+        } else {
+          child.material.dispose();
+        }
+      }
+    });
+    currentModel = null;
+  }
+}
+
+function frameModel(object) {
+  // Force world matrix update before measuring
+  object.updateMatrixWorld(true);
+
+  let box = new THREE.Box3().setFromObject(object);
+
+  if (box.isEmpty()) {
+    setStatus('Warning: model appears to have no visible geometry.');
+    return;
+  }
+
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+
+  // Re-center the object at the origin
+  object.position.x -= center.x;
+  object.position.y -= center.y;
+  object.position.z -= center.z;
+
+  const maxDim = Math.max(size.x, size.y, size.z, 0.0001);
+  const targetSize = 2.5;
+  const scale = targetSize / maxDim;
+  object.scale.setScalar(scale);
+  object.userData.appliedScale = scale;
+
+  // Recompute box after scaling/centering to get accurate framing
+  object.updateMatrixWorld(true);
+  box = new THREE.Box3().setFromObject(object);
+  const newSize = box.getSize(new THREE.Vector3());
+  const newCenter = box.getCenter(new THREE.Vector3());
+
+  const fitRadius = newSize.length() * 0.5 || 1;
+  const fov = camera.fov * (Math.PI / 180);
+  const distance = Math.max((fitRadius / Math.sin(fov / 2)) * 1.4, 1.5);
+
+  // Scale zoom limits to this specific model's size, so elongated or very
+  // large/small models don't hit an artificial "stuck" zoom boundary.
+  controls.minDistance = Math.max(distance * 0.01, 0.001);
+  controls.maxDistance = distance * 20;
+
+  camera.near = distance / 1000;
+  camera.far = distance * 200;
+  camera.updateProjectionMatrix();
+
+  camera.position.set(
+    newCenter.x + distance * 0.5,
+    newCenter.y + distance * 0.35,
+    newCenter.z + distance
+  );
+  camera.lookAt(newCenter);
+  controls.target.copy(newCenter);
+  controls.update();
+}
+
+function defaultMaterial() {
+  return new THREE.MeshStandardMaterial({
+    color: 0xb89968,
+    metalness: 0.0,
+    roughness: 0.85,
+    flatShading: false,
+    side: THREE.DoubleSide
+  });
+}
+
+function addMeshToScene(mesh) {
+  clearCurrentModel();
+  if (typeof clearMeasurement === 'function') clearMeasurement();
+  currentModel = mesh;
+  mesh.traverse((child) => {
+    if (child.isMesh) {
+      child.castShadow = true;
+      child.receiveShadow = true;
+    }
+  });
+  scene.add(mesh);
+  frameModel(mesh);
+  document.getElementById('toolRow').style.display = 'flex';
+  document.getElementById('centerUpload').classList.add('hidden');
+  document.getElementById('topbar').classList.add('model-loaded');
+  document.getElementById('floatingUploadWrap').classList.add('visible');
+  updateProperties(mesh, currentFileName, currentFileSize);
+
+  const printStatusEl = document.getElementById('printStatus');
+  const printResult = checkPrintability(mesh);
+  printStatusEl.textContent = printResult.label;
+  printStatusEl.className = printResult.status === 'printable' ? 'printable'
+    : printResult.status === 'not-printable' ? 'not-printable' : '';
+  printStatusEl.style.display = 'block';
+  if (printResult.status === 'unknown') {
+    printStatusEl.style.background = '#f0ece3';
+    printStatusEl.style.color = '#6b6a67';
+  }
+
+  if (typeof viewCycleBtn !== 'undefined') {
+    currentViewIndex = -1;
+    viewCycleBtn.textContent = '⬤';
+    viewCycleBtn.title = 'Front view';
+  }
+
+  if (typeof refreshReadDescButton === 'function') {
+    refreshReadDescButton();
+  }
+
+  if (typeof closeSubtitles === 'function') {
+    closeSubtitles();
+  }
+}
+
+// Detects which side of a thin slab has more surface detail (the fossil face)
+// by measuring how "bumpy" each side's surface is (variance in vertex depth along
+// the thinnest axis of the model), then orienting the bumpier side toward the camera.
+function orientDetailSideForward(object) {
+  object.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(object);
+  const size = box.getSize(new THREE.Vector3());
+
+  // Find the thinnest axis — that's the slab's depth axis
+  const axes = ['x', 'y', 'z'];
+  const sizes = [size.x, size.y, size.z];
+  let thinAxisIndex = 0;
+  for (let i = 1; i < 3; i++) {
+    if (sizes[i] < sizes[thinAxisIndex]) thinAxisIndex = i;
+  }
+  const thinAxis = axes[thinAxisIndex];
+  const mid = box.min[thinAxis] + size[axes[thinAxisIndex]] / 2;
+
+  // For each half (front/back along the thin axis), measure how much the
+  // surface deviates from flat — the fossil-detail side will have much higher variance.
+  let frontSum = 0, frontSumSq = 0, frontCount = 0;
+  let backSum = 0, backSumSq = 0, backCount = 0;
+
+  object.traverse((child) => {
+    if (child.isMesh && child.geometry && child.geometry.attributes.position) {
+      const pos = child.geometry.attributes.position;
+      const sampleStep = Math.max(1, Math.floor(pos.count / 8000));
+      const v = new THREE.Vector3();
+      for (let i = 0; i < pos.count; i += sampleStep) {
+        v.set(pos.getX(i), pos.getY(i), pos.getZ(i));
+        v.applyMatrix4(child.matrixWorld);
+        const val = v[thinAxis];
+        if (val >= mid) {
+          frontSum += val; frontSumSq += val * val; frontCount++;
+        } else {
+          backSum += val; backSumSq += val * val; backCount++;
+        }
+      }
+    }
+  });
+
+  if (frontCount < 10 || backCount < 10) return; // not enough data, leave as-is
+
+  const frontVariance = (frontSumSq / frontCount) - Math.pow(frontSum / frontCount, 2);
+  const backVariance = (backSumSq / backCount) - Math.pow(backSum / backCount, 2);
+
+  // The camera (after frameModel) looks roughly from +thinAxis toward the model.
+  // If the BACK half has more surface variance, the detailed side is facing away — flip it.
+  if (backVariance > frontVariance * 1.1) {
+    if (thinAxisIndex === 0) object.rotation.z += Math.PI;
+    else if (thinAxisIndex === 1) object.rotation.x += Math.PI;
+    else object.rotation.y += Math.PI;
+    object.updateMatrixWorld(true);
+  }
+}
+
+const flipXBtn = document.getElementById('flipXBtn');
+const flipYBtn = document.getElementById('flipYBtn');
+
+flipXBtn.addEventListener('click', () => {
+  if (currentModel) {
+    currentModel.rotation.y += Math.PI;
+  }
+});
+
+flipYBtn.addEventListener('click', () => {
+  if (currentModel) {
+    currentModel.rotation.x += Math.PI;
+  }
+});
+
+const resetBtn = document.getElementById('resetBtn');
+resetBtn.addEventListener('click', () => {
+  if (currentModel) {
+    currentModel.quaternion.identity();
+    frameModel(currentModel);
+    currentViewIndex = -1;
+    viewCycleBtn.textContent = '⬤';
+    viewCycleBtn.title = 'Front view';
+  }
+});
+
+// ---------- VIEW CYCLE BUTTON ----------
+const VIEWS = [
+  { name: 'Front',  icon: '⬤', dir: [0, 0, 1] },
+  { name: 'Back',   icon: '◯', dir: [0, 0, -1] },
+  { name: 'Left',   icon: '◀', dir: [-1, 0, 0] },
+  { name: 'Right',  icon: '▶', dir: [1, 0, 0] },
+  { name: 'Top',    icon: '▲', dir: [0, 1, 0] },
+  { name: 'Bottom', icon: '▼', dir: [0, -1, 0] }
+];
+let currentViewIndex = -1; // -1 = default/free view, not yet cycled
+
+const viewCycleBtn = document.getElementById('viewCycleBtn');
+
+function applyView(index) {
+  if (!currentModel) return;
+
+  currentModel.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(currentModel);
+  const center = box.getCenter(new THREE.Vector3());
+  const size = box.getSize(new THREE.Vector3());
+
+  const fitRadius = size.length() * 0.5 || 1;
+  const fov = camera.fov * (Math.PI / 180);
+  const distance = Math.max((fitRadius / Math.sin(fov / 2)) * 1.4, 1.5);
+
+  const view = VIEWS[index];
+  const [dx, dy, dz] = view.dir;
+
+  camera.position.set(
+    center.x + dx * distance,
+    center.y + dy * distance,
+    center.z + dz * distance
+  );
+
+  // Use a stable "up" vector so top/bottom views don't flip oddly
+  if (view.name === 'Top' || view.name === 'Bottom') {
+    camera.up.set(0, 0, -1);
+  } else {
+    camera.up.set(0, 1, 0);
+  }
+
+  camera.lookAt(center);
+  controls.target.copy(center);
+  controls.update();
+
+  viewCycleBtn.textContent = view.icon;
+  viewCycleBtn.title = view.name + ' view';
+}
+
+viewCycleBtn.addEventListener('click', () => {
+  if (!currentModel) return;
+  currentViewIndex = (currentViewIndex + 1) % VIEWS.length;
+  applyView(currentViewIndex);
+});
+
+// Double-tap on the model to make that point the new rotation pivot
+// Interaction mode: 'none' (default recenter-on-double-tap) or 'measure'
+let interactionMode = 'none';
+const raycaster = new THREE.Raycaster();
+const tapPos = new THREE.Vector2();
+let lastTapTime = 0;
+let lastTapX = 0;
+let lastTapY = 0;
+let touchStartX = 0;
+let touchStartY = 0;
+let touchMoved = false;
+
+function getModelPointFromTap(clientX, clientY) {
+  if (!currentModel) return null;
+  const rect = renderer.domElement.getBoundingClientRect();
+  tapPos.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+  tapPos.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(tapPos, camera);
+  const intersects = raycaster.intersectObject(currentModel, true);
+  return intersects.length > 0 ? intersects[0].point.clone() : null;
+}
+
+function handleDoubleTap(clientX, clientY) {
+  const point = getModelPointFromTap(clientX, clientY);
+  if (point) {
+    controls.target.copy(point);
+    controls.update();
+  }
+}
+
+renderer.domElement.addEventListener('touchstart', (e) => {
+  if (e.touches.length === 1) {
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+    touchMoved = false;
+  }
+});
+
+renderer.domElement.addEventListener('touchmove', (e) => {
+  if (e.touches.length === 1) {
+    const dx = e.touches[0].clientX - touchStartX;
+    const dy = e.touches[0].clientY - touchStartY;
+    // If the finger has moved more than a few pixels, this is a drag, not a tap.
+    if (Math.sqrt(dx * dx + dy * dy) > 12) {
+      touchMoved = true;
+    }
+  }
+});
+
+renderer.domElement.addEventListener('touchend', (e) => {
+  if (interactionMode === 'measure') return; // measure uses single taps instead
+  if (touchMoved) return; // this was a drag/rotate gesture, not a tap — ignore
+  if (e.changedTouches.length === 0) return;
+
+  const touch = e.changedTouches[0];
+  const now = Date.now();
+  const dx = touch.clientX - lastTapX;
+  const dy = touch.clientY - lastTapY;
+  const distFromLastTap = Math.sqrt(dx * dx + dy * dy);
+
+  // Require two quick taps close together in both time AND position
+  if (now - lastTapTime < 300 && distFromLastTap < 25) {
+    handleDoubleTap(touch.clientX, touch.clientY);
+    lastTapTime = 0; // reset so a third quick tap doesn't immediately re-trigger
+  } else {
+    lastTapTime = now;
+    lastTapX = touch.clientX;
+    lastTapY = touch.clientY;
+  }
+});
+
+renderer.domElement.addEventListener('dblclick', (e) => {
+  if (interactionMode === 'measure') return;
+  handleDoubleTap(e.clientX, e.clientY);
+});
+
+// ---------- MEASURE FEATURE ----------
+let measurePoints = [];
+let lastMeasuredFileUnitDist = 0;
+let measureMarkers = [];
+let measureLine = null;
+const measureResultEl = document.getElementById('measureResult');
+
+function clearMeasurement() {
+  measurePoints = [];
+  measureMarkers.forEach(m => scene.remove(m));
+  measureMarkers = [];
+  if (measureLine) { scene.remove(measureLine); measureLine = null; }
+  measureResultEl.textContent = 'No points selected.';
+}
+
+// Keeps measurement dots a small, constant size on screen no matter how far
+// zoomed in or out the camera is — otherwise a fixed world-space size looks
+// tiny when zoomed out and huge (hard to place precisely) when zoomed in.
+const MEASURE_MARKER_SCREEN_SIZE = 0.012; // fraction of camera distance
+function updateMeasureMarkerScale() {
+  measureMarkers.forEach((marker) => {
+    const dist = camera.position.distanceTo(marker.position);
+    const scale = Math.max(dist * MEASURE_MARKER_SCREEN_SIZE, 0.0005);
+    marker.scale.setScalar(scale);
+  });
+}
+
+function addMeasurePoint(point) {
+  const markerGeo = new THREE.SphereGeometry(1, 12, 12); // unit sphere; real size set by updateMeasureMarkerScale()
+  const markerMat = new THREE.MeshBasicMaterial({ color: 0xe74c3c, depthTest: false });
+  const marker = new THREE.Mesh(markerGeo, markerMat);
+  marker.renderOrder = 999;
+  marker.position.copy(point);
+  scene.add(marker);
+  measureMarkers.push(marker);
+  measurePoints.push(point);
+  updateMeasureMarkerScale();
+
+  if (measurePoints.length === 2) {
+    const [a, b] = measurePoints;
+    const dist = a.distanceTo(b);
+    const scaleFactor = currentModel && currentModel.userData.appliedScale ? currentModel.userData.appliedScale : 1;
+    const fileUnitDist = dist / scaleFactor;
+
+    const calibration = currentModel && currentModel.userData.realWorldMmPerFileUnit;
+    lastMeasuredFileUnitDist = fileUnitDist;
+
+    if (calibration) {
+      const realMm = fileUnitDist * calibration;
+      measureResultEl.textContent = 'Distance: ' + formatRealWorldDistance(realMm);
+    } else {
+      measureResultEl.textContent = 'Distance: ' + fileUnitDist.toFixed(2) + ' file units (real-world scale not set — tap 📐 to set it)';
+    }
+
+    const geo = new THREE.BufferGeometry().setFromPoints([a, b]);
+    const mat = new THREE.LineBasicMaterial({ color: 0xe74c3c, linewidth: 2 });
+    measureLine = new THREE.Line(geo, mat);
+    scene.add(measureLine);
+  } else if (measurePoints.length > 2) {
+    clearMeasurement();
+    addMeasurePoint(point);
+  }
+}
+
+function formatRealWorldDistance(mm) {
+  if (mm >= 1000) return (mm / 1000).toFixed(3) + ' m';
+  if (mm >= 10) return (mm / 10).toFixed(2) + ' cm';
+  return mm.toFixed(1) + ' mm';
+}
+
+renderer.domElement.addEventListener('click', (e) => {
+  if (interactionMode !== 'measure') return;
+  const point = getModelPointFromTap(e.clientX, e.clientY);
+  if (point) addMeasurePoint(point);
+});
+
+document.getElementById('measureClearBtn').addEventListener('click', clearMeasurement);
+
+// ---------- SLICE FEATURE ----------
+const clipPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+renderer.localClippingEnabled = true;
+
+function updateClipPlane() {
+  const enabled = document.getElementById('sliceToggle').checked;
+  const axis = document.getElementById('sliceAxis').value;
+  const posVal = parseFloat(document.getElementById('slicePos').value) / 100;
+  const flip = document.getElementById('sliceFlip').checked;
+
+  const normal = new THREE.Vector3(
+    axis === 'x' ? 1 : 0,
+    axis === 'y' ? 1 : 0,
+    axis === 'z' ? 1 : 0
+  );
+  if (flip) normal.negate();
+  clipPlane.normal.copy(normal);
+  clipPlane.constant = posVal * (flip ? -1 : 1) * 2.5;
+
+  if (currentModel) {
+    currentModel.traverse((child) => {
+      if (child.isMesh) {
+        child.material.clippingPlanes = enabled ? [clipPlane] : [];
+        child.material.needsUpdate = true;
+      }
+    });
+  }
+}
+
+document.getElementById('sliceToggle').addEventListener('change', updateClipPlane);
+document.getElementById('sliceAxis').addEventListener('change', updateClipPlane);
+document.getElementById('slicePos').addEventListener('input', updateClipPlane);
+document.getElementById('sliceFlip').addEventListener('change', updateClipPlane);
+
+// ---------- COLOR FEATURE ----------
+const FOSSIL_COLORS = [
+  { name: 'Bone Tan', hex: 0xb89968 },
+  { name: 'Limestone', hex: 0xe8dcc0 },
+  { name: 'Ivory', hex: 0xf3ecd8 },
+  { name: 'Chalk White', hex: 0xf5f2ea },
+  { name: 'Sandstone', hex: 0xd9b871 },
+  { name: 'Desert Tan', hex: 0xc9a86a },
+  { name: 'Amber', hex: 0xc98a3e },
+  { name: 'Honey', hex: 0xd9a441 },
+  { name: 'Rust', hex: 0x9c5a3c },
+  { name: 'Terracotta', hex: 0xb35a3a },
+  { name: 'Ochre', hex: 0xaa7a2e },
+  { name: 'Umber', hex: 0x7a5230 },
+  { name: 'Chocolate', hex: 0x5c3a24 },
+  { name: 'Dark Grey', hex: 0x5a5a5a },
+  { name: 'Slate Grey', hex: 0x6e7275 },
+  { name: 'Charcoal', hex: 0x2b2b2b },
+  { name: 'Jet Black', hex: 0x121212 },
+  { name: 'Slate Blue', hex: 0x5f6b7a },
+  { name: 'Basalt', hex: 0x3f4245 },
+  { name: 'Fossil Grey-Brown', hex: 0x7d6f5e },
+  { name: 'Petrified Green', hex: 0x6b7a5e },
+  { name: 'Malachite', hex: 0x3d7a5c },
+  { name: 'Copper Green', hex: 0x5c8a6e },
+  { name: 'Pyrite Gold', hex: 0xc9a227 },
+  { name: 'Opalized Blue', hex: 0x6f93a8 },
+  { name: 'Agate Rust', hex: 0x8a4b32 },
+  { name: 'Bone White', hex: 0xece4d4 },
+  { name: 'Ash Grey', hex: 0x9a968c }
+];
+
+const colorSwatchesEl = document.getElementById('colorSwatches');
+FOSSIL_COLORS.forEach((c) => {
+  const swatch = document.createElement('div');
+  swatch.className = 'color-swatch';
+  swatch.style.background = '#' + c.hex.toString(16).padStart(6, '0');
+  swatch.title = c.name;
+  swatch.addEventListener('click', () => {
+    document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
+    swatch.classList.add('selected');
+    applyModelColor(c.hex);
+  });
+  colorSwatchesEl.appendChild(swatch);
+});
+
+function applyModelColor(hex) {
+  if (!currentModel) return;
+  currentModel.traverse((child) => {
+    if (child.isMesh && child.material && !child.material.vertexColors) {
+      child.material.color.setHex(hex);
+    }
+  });
+}
+
+document.getElementById('customColorPicker').addEventListener('input', (e) => {
+  document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
+  const hex = parseInt(e.target.value.replace('#', ''), 16);
+  applyModelColor(hex);
+});
+
+// ---------- PROPERTIES FEATURE ----------
+
+// Checks if a mesh is "watertight" (closed, no holes) — a rough proxy for 3D-printability.
+// Every edge in a fully closed mesh should be shared by exactly 2 triangles.
+// This is a heuristic check, not a full manifold/print-readiness validator.
+function checkPrintability(object) {
+  let totalTris = 0;
+  let hasNonIndexed = false;
+  let openEdges = 0;
+
+  object.traverse((child) => {
+    if (!child.isMesh || !child.geometry) return;
+    const geo = child.geometry;
+    const pos = geo.attributes.position;
+    if (!pos) return;
+
+    // Only run the full edge check on reasonably sized meshes — very large
+    // scans (millions of faces) would be too slow to check on a phone.
+    const triCount = geo.index ? geo.index.count / 3 : pos.count / 3;
+    totalTris += triCount;
+
+    if (!geo.index) {
+      hasNonIndexed = true;
+      return;
+    }
+
+    if (triCount > 300000) return; // skip edge-check for huge meshes, too slow on mobile
+
+    const edgeMap = new Map();
+    const idx = geo.index.array;
+
+    function edgeKey(a, b) {
+      return a < b ? a + '_' + b : b + '_' + a;
+    }
+
+    for (let i = 0; i < idx.length; i += 3) {
+      const a = idx[i], b = idx[i + 1], c = idx[i + 2];
+      [[a, b], [b, c], [c, a]].forEach(([x, y]) => {
+        const key = edgeKey(x, y);
+        edgeMap.set(key, (edgeMap.get(key) || 0) + 1);
+      });
+    }
+
+    edgeMap.forEach((count) => {
+      if (count !== 2) openEdges++;
+    });
+  });
+
+  if (totalTris > 300000) {
+    return { status: 'unknown', label: 'Too complex to check on this device' };
+  }
+  if (hasNonIndexed) {
+    return { status: 'unknown', label: 'Could not fully verify (unsupported mesh format)' };
+  }
+  if (openEdges === 0 && totalTris > 0) {
+    return { status: 'printable', label: '✓ Likely 3D-printable (closed surface)' };
+  }
+  return { status: 'not-printable', label: '✗ Not print-ready (' + openEdges + ' open edges — surface has holes)' };
+}
+
+function formatFileSize(bytes) {
+  if (!bytes || bytes <= 0) return '—';
+  const KB = 1024;
+  const MB = KB * 1024;
+  const GB = MB * 1024;
+  if (bytes >= GB) return (bytes / GB).toFixed(2) + ' GB';
+  if (bytes >= MB) return (bytes / MB).toFixed(2) + ' MB';
+  return (bytes / KB).toFixed(2) + ' KB';
+}
+
+function updateProperties(mesh, fileName, fileSize) {
+  let vertCount = 0;
+  let faceCount = 0;
+  const box = new THREE.Box3().setFromObject(mesh);
+  const size = box.getSize(new THREE.Vector3());
+
+  mesh.traverse((child) => {
+    if (child.isMesh && child.geometry) {
+      const pos = child.geometry.attributes.position;
+      if (pos) vertCount += pos.count;
+      if (child.geometry.index) faceCount += child.geometry.index.count / 3;
+    }
+  });
+
+  const rows = [
+    ['File name', fileName || '—'],
+    ['File size', formatFileSize(fileSize)],
+    ['Vertices', vertCount.toLocaleString()],
+    ['Faces', Math.round(faceCount).toLocaleString()],
+    ['Width (X)', size.x.toFixed(3)],
+    ['Height (Y)', size.y.toFixed(3)],
+    ['Depth (Z)', size.z.toFixed(3)]
+  ];
+
+  const table = document.getElementById('propsTable');
+  table.innerHTML = rows.map(([k, v]) =>
+    '<tr><td>' + k + '</td><td>' + v + '</td></tr>'
+  ).join('');
+}
+
+// ---------- PANEL TOGGLING ----------
+const panels = {
+  measurePanel: document.getElementById('measurePanel'),
+  slicePanel: document.getElementById('slicePanel'),
+  colorPanel: document.getElementById('colorPanel'),
+  propsPanel: document.getElementById('propsPanel'),
+  descPanel: document.getElementById('descPanel'),
+  customizePanel: document.getElementById('customizePanel'),
+  scalePanel: document.getElementById('scalePanel')
+};
+
+function closeAllPanels() {
+  Object.values(panels).forEach(p => p.classList.remove('open'));
+  document.getElementById('measureBtn').classList.remove('active');
+  document.getElementById('sliceBtn').classList.remove('active');
+  document.getElementById('colorBtn').classList.remove('active');
+  document.getElementById('propsBtn').classList.remove('active');
+  document.getElementById('descBtn').classList.remove('active');
+  document.getElementById('customizeBtn').classList.remove('active');
+  document.getElementById('scaleBtn').classList.remove('active');
+  interactionMode = 'none';
+}
+
+function togglePanel(panelId, btnId, mode) {
+  const isOpen = panels[panelId].classList.contains('open');
+  closeAllPanels();
+  if (!isOpen) {
+    panels[panelId].classList.add('open');
+    document.getElementById(btnId).classList.add('active');
+    interactionMode = mode || 'none';
+  }
+}
+
+document.getElementById('measureBtn').addEventListener('click', () => togglePanel('measurePanel', 'measureBtn', 'measure'));
+document.getElementById('sliceBtn').addEventListener('click', () => togglePanel('slicePanel', 'sliceBtn'));
+document.getElementById('colorBtn').addEventListener('click', () => togglePanel('colorPanel', 'colorBtn'));
+document.getElementById('propsBtn').addEventListener('click', () => togglePanel('propsPanel', 'propsBtn'));
+document.getElementById('descBtn').addEventListener('click', () => {
+  togglePanel('descPanel', 'descBtn');
+  loadDescriptionForCurrentFile();
+});
+
+// ---------- TOOLBAR CUSTOMIZATION ----------
+const TOOLBAR_ORDER_KEY = 'fossilViewerToolbarOrder';
+const toolRowEl = document.getElementById('toolRow');
+
+const BUTTON_LABELS = {
+  flipXBtn: 'Flip Horizontal',
+  flipYBtn: 'Flip Vertical',
+  resetBtn: 'Reset View',
+  viewCycleBtn: 'Cycle Views',
+  measureBtn: 'Measure Distance',
+  sliceBtn: 'Slice View',
+  colorBtn: 'Change Color',
+  propsBtn: 'Properties',
+  descBtn: 'Description',
+  customizeBtn: 'Customize Toolbar',
+  scaleBtn: 'Set Real-World Scale',
+  invertRotateBtn: 'Flip Rotation Direction',
+  themeToggleBtn: 'Dark / Light Mode',
+  subtitleBtn: 'Play Description as Subtitles'
+};
+
+function getCurrentToolbarOrder() {
+  return Array.from(toolRowEl.children).map(el => el.id);
+}
+
+function applyToolbarOrder(order) {
+  order.forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) toolRowEl.appendChild(el);
+  });
+}
+
+function saveToolbarOrder() {
+  const order = getCurrentToolbarOrder();
+  try {
+    localStorage.setItem(TOOLBAR_ORDER_KEY, JSON.stringify(order));
+  } catch (e) { /* ignore storage errors */ }
+}
+
+function loadSavedToolbarOrder() {
+  try {
+    const saved = localStorage.getItem(TOOLBAR_ORDER_KEY);
+    if (saved) {
+      const order = JSON.parse(saved);
+      applyToolbarOrder(order);
+    }
+  } catch (e) { /* ignore, keep default order */ }
+}
+
+function renderCustomizeList() {
+  const listEl = document.getElementById('customizeList');
+  const order = getCurrentToolbarOrder();
+  listEl.innerHTML = '';
+
+  order.forEach((id, index) => {
+    const row = document.createElement('div');
+    row.className = 'reorder-row';
+
+    const icon = document.createElement('div');
+    icon.className = 'reorder-icon';
+    const btnEl = document.getElementById(id);
+    icon.textContent = btnEl ? btnEl.textContent : '';
+
+    const name = document.createElement('div');
+    name.className = 'reorder-name';
+    name.textContent = BUTTON_LABELS[id] || id;
+
+    const leftBtn = document.createElement('button');
+    leftBtn.className = 'reorder-arrow';
+    leftBtn.textContent = '◀';
+    leftBtn.disabled = index === 0;
+    leftBtn.addEventListener('click', () => moveButton(index, index - 1));
+
+    const rightBtn = document.createElement('button');
+    rightBtn.className = 'reorder-arrow';
+    rightBtn.textContent = '▶';
+    rightBtn.disabled = index === order.length - 1;
+    rightBtn.addEventListener('click', () => moveButton(index, index + 1));
+
+    row.appendChild(icon);
+    row.appendChild(name);
+    row.appendChild(leftBtn);
+    row.appendChild(rightBtn);
+    listEl.appendChild(row);
+  });
+}
+
+function moveButton(fromIndex, toIndex) {
+  const order = getCurrentToolbarOrder();
+  const [moved] = order.splice(fromIndex, 1);
+  order.splice(toIndex, 0, moved);
+  applyToolbarOrder(order);
+  saveToolbarOrder();
+  renderCustomizeList();
+}
+
+document.getElementById('customizeBtn').addEventListener('click', () => {
+  togglePanel('customizePanel', 'customizeBtn');
+  renderCustomizeList();
+});
+
+// Apply any previously saved toolbar order on load
+loadSavedToolbarOrder();
+
+// ---------- REAL-WORLD SCALE CALIBRATION ----------
+document.getElementById('scaleBtn').addEventListener('click', () => {
+  togglePanel('scalePanel', 'scaleBtn');
+  const statusEl = document.getElementById('scaleStatus');
+  if (lastMeasuredFileUnitDist > 0) {
+    statusEl.textContent = 'Using your last Measure selection (' + lastMeasuredFileUnitDist.toFixed(3) + ' file units) as the reference distance.';
+  } else {
+    statusEl.textContent = 'Tip: use the 📏 Measure tool first to select two points on a feature with a known real-world size, then come back here.';
+  }
+});
+
+document.getElementById('applyScaleBtn').addEventListener('click', () => {
+  const statusEl = document.getElementById('scaleStatus');
+  const valueInput = parseFloat(document.getElementById('realDistanceInput').value);
+  const unit = document.getElementById('realDistanceUnit').value;
+
+  if (!currentModel) {
+    statusEl.textContent = 'Load a fossil file first.';
+    return;
+  }
+  if (!lastMeasuredFileUnitDist || lastMeasuredFileUnitDist <= 0) {
+    statusEl.textContent = 'Please use the 📏 Measure tool first to select two reference points.';
+    return;
+  }
+  if (!valueInput || valueInput <= 0) {
+    statusEl.textContent = 'Enter a valid positive number for the real-world distance.';
+    return;
+  }
+
+  const unitToMm = { mm: 1, cm: 10, m: 1000, in: 25.4 };
+  const realMm = valueInput * unitToMm[unit];
+  const mmPerFileUnit = realMm / lastMeasuredFileUnitDist;
+
+  currentModel.userData.realWorldMmPerFileUnit = mmPerFileUnit;
+  statusEl.textContent = 'Scale applied ✓ — future measurements on this file will show real-world size.';
+});
+
+// ---------- SUBTITLE-STYLE DESCRIPTION PLAYBACK ----------
+// Splits the saved description into sentence-length chunks and displays
+// them one at a time like movie subtitles, auto-advancing on a timer,
+// while the 3D model stays fully visible and interactive underneath.
+const subtitleBar = document.getElementById('subtitleBar');
+const subtitleTextEl = document.getElementById('subtitleText');
+
+let subtitleLines = [];
+let subtitleIndex = 0;
+let subtitlePlaying = false;
+let subtitleTimer = null;
+const SUBTITLE_MS_PER_LINE = 12000;
+
+function splitIntoSubtitleLines(text) {
+  if (!text) return [];
+  // Split on sentence-ending punctuation, keep it, and drop empty fragments.
+  const rough = text.match(/[^.!?]+[.!?]*/g) || [text];
+  return rough.map(s => s.trim()).filter(s => s.length > 0);
+}
+
+function showSubtitleLine(index) {
+  if (subtitleLines.length === 0) {
+    subtitleTextEl.textContent = 'No description saved for this file yet.';
+    return;
+  }
+  subtitleIndex = Math.max(0, Math.min(index, subtitleLines.length - 1));
+  subtitleTextEl.textContent = subtitleLines[subtitleIndex];
+}
+
+function stepSubtitle(forward) {
+  if (subtitleLines.length === 0) return;
+  const next = subtitleIndex + (forward ? 1 : -1);
+  if (next >= subtitleLines.length) {
+    pauseSubtitles();
+    showSubtitleLine(subtitleLines.length - 1);
+    return;
+  }
+  showSubtitleLine(next);
+}
+
+function playSubtitles() {
+  if (subtitleLines.length === 0) return;
+  subtitlePlaying = true;
+  clearInterval(subtitleTimer);
+  subtitleTimer = setInterval(() => {
+    if (subtitleIndex >= subtitleLines.length - 1) {
+      showSubtitleLine(0); // loop back to the start for continuous playback
+      return;
+    }
+    stepSubtitle(true);
+  }, SUBTITLE_MS_PER_LINE);
+}
+
+function pauseSubtitles() {
+  subtitlePlaying = false;
+  clearInterval(subtitleTimer);
+}
+
+function openSubtitles() {
+  if (!currentFileName) {
+    setStatus('Load a fossil file first.');
+    return;
+  }
+  getDescription(currentFileName).then((text) => {
+    subtitleLines = splitIntoSubtitleLines(text);
+    subtitleIndex = 0;
+    subtitleBar.classList.add('active');
+    showSubtitleLine(0);
+    if (subtitleLines.length > 1) {
+      playSubtitles();
+    } else {
+      pauseSubtitles();
+    }
+    // Switch to full view so the toolbar/panels don't compete for space
+    // with the model while subtitles are playing.
+    if (typeof toggleFullView === 'function' && !isFullView) {
+      toggleFullView();
+    }
+    // Maximize visible model area: hide the description button entirely,
+    // shrink the upload button, and let the model use the space normally
+    // reserved for the top/bottom toolbars.
+    document.body.classList.add('subtitles-active');
+  });
+}
+
+function closeSubtitles() {
+  pauseSubtitles();
+  subtitleBar.classList.remove('active');
+  document.body.classList.remove('subtitles-active');
+  if (typeof toggleFullView === 'function' && isFullView) {
+    toggleFullView(true);
+  }
+}
+
+document.getElementById('subtitleBtn').addEventListener('click', () => {
+  if (subtitleBar.classList.contains('active')) {
+    closeSubtitles();
+  } else {
+    openSubtitles();
+  }
+});
+
+document.getElementById('subtitleCloseBtn').addEventListener('click', () => {
+  closeSubtitles();
+});
+
+document.querySelectorAll('.panel-close').forEach((btn) => {
+  btn.addEventListener('click', () => closeAllPanels());
+});
+
+// ---------- ROTATION DIRECTION TOGGLE (both axes) ----------
+const invertRotateBtn = document.getElementById('invertRotateBtn');
+function updateInvertRotateBtnLabel() {
+  invertRotateBtn.classList.toggle('active', rotationInverted);
+}
+updateInvertRotateBtnLabel();
+
+invertRotateBtn.addEventListener('click', () => {
+  toggleRotationDirection();
+  updateInvertRotateBtnLabel();
+  setStatus(rotationInverted
+    ? 'Rotation direction flipped.'
+    : 'Rotation direction back to default.');
+});
+
+// ---------- THEME TOGGLE (dark / light) ----------
+const themeToggleBtn = document.getElementById('themeToggleBtn');
+function updateThemeToggleIcon() {
+  themeToggleBtn.textContent = currentTheme === 'dark' ? '☀️' : '🌙';
+  themeToggleBtn.classList.toggle('active', currentTheme === 'dark');
+}
+updateThemeToggleIcon();
+
+themeToggleBtn.addEventListener('click', () => {
+  applyTheme(currentTheme === 'dark' ? 'light' : 'dark');
+  updateThemeToggleIcon();
+  setStatus(currentTheme === 'dark' ? 'Dark mode on.' : 'Light mode on.');
+});
+
+// ---------- FULL VIEW MODE (hide all UI) ----------
+let isFullView = false;
+const fullscreenBtn = document.getElementById('fullscreenBtn');
+const topbarEl = document.getElementById('topbar');
+const hintEl = document.getElementById('hint');
+const printabilityEl = document.getElementById('printStatus');
+
+const exitFullViewBtn = document.createElement('button');
+exitFullViewBtn.textContent = '✕';
+exitFullViewBtn.id = 'exitFullViewBtn';
+exitFullViewBtn.style.cssText = 'position:fixed; top:14px; right:14px; z-index:30; width:38px; height:38px; border-radius:50%; background:rgba(0,0,0,0.55); color:#fff; border:none; font-size:16px; display:none;';
+document.body.appendChild(exitFullViewBtn);
+
+function toggleFullView(forceOff) {
+  isFullView = forceOff ? false : !isFullView;
+  closeAllPanels();
+  topbarEl.style.display = isFullView ? 'none' : 'block';
+  hintEl.style.display = isFullView ? 'none' : 'block';
+  printabilityEl.style.display = isFullView ? 'none' : (currentModel ? 'block' : 'none');
+  // While subtitles are playing, their own close button is the single exit
+  // control — the separate full-view exit button stays hidden so there's
+  // only ever one close button on screen at a time.
+  const subtitlesActive = subtitleBar && subtitleBar.classList.contains('active');
+  exitFullViewBtn.style.display = (isFullView && !subtitlesActive) ? 'flex' : 'none';
+  exitFullViewBtn.style.alignItems = 'center';
+  exitFullViewBtn.style.justifyContent = 'center';
+}
+
+fullscreenBtn.addEventListener('click', () => toggleFullView());
+exitFullViewBtn.addEventListener('click', () => {
+  toggleFullView(true);
+  if (typeof closeSubtitles === 'function' && subtitleBar.classList.contains('active')) {
+    pauseSubtitles();
+    subtitleBar.classList.remove('active');
+    document.body.classList.remove('subtitles-active');
+  }
+});
+
+function setStatus(text) {
+  statusEl.textContent = text;
+}
+
+function loadFile(file) {
+  const name = file.name.toLowerCase();
+  const ext = name.substring(name.lastIndexOf('.') + 1);
+  const reader = new FileReader();
+  currentFileName = file.name;
+  currentFileSize = file.size;
+
+  const instructionsEl = document.getElementById('loadingInstructions');
+  const hasSeenInstructions = localStorage.getItem('ldjHasSeenInstructions');
+  instructionsEl.style.display = hasSeenInstructions ? 'none' : 'block';
+  if (!hasSeenInstructions) {
+    try { localStorage.setItem('ldjHasSeenInstructions', 'true'); } catch (e) { /* ignore */ }
+  }
+
+  loadingEl.style.display = 'block';
+  setStatus('Loading: ' + file.name);
+
+  reader.onerror = () => {
+    loadingEl.style.display = 'none';
+    setStatus('Error reading file.');
+  };
+
+  if (ext === 'stl') {
+    reader.onload = (e) => {
+      try {
+        const loader = new STLLoader();
+        const geometry = loader.parse(e.target.result);
+        geometry.computeVertexNormals();
+        const mesh = new THREE.Mesh(geometry, defaultMaterial());
+        addMeshToScene(mesh);
+        setStatus('Loaded: ' + file.name);
+      } catch (err) {
+        setStatus('Failed to parse STL: ' + err.message);
+      }
+      loadingEl.style.display = 'none';
+    };
+    reader.readAsArrayBuffer(file);
+
+  } else if (ext === 'obj') {
+    reader.onload = (e) => {
+      try {
+        const loader = new OBJLoader();
+        const object = loader.parse(e.target.result);
+        object.traverse((child) => {
+          if (child.isMesh) {
+            child.material = defaultMaterial();
+          }
+        });
+        addMeshToScene(object);
+        setStatus('Loaded: ' + file.name);
+      } catch (err) {
+        setStatus('Failed to parse OBJ: ' + err.message);
+      }
+      loadingEl.style.display = 'none';
+    };
+    reader.readAsText(file);
+
+  } else if (ext === 'ply') {
+    reader.onload = (e) => {
+      try {
+        const loader = new PLYLoader();
+        const geometry = loader.parse(e.target.result);
+
+        const vertCount = geometry.hasAttribute('position') ? geometry.attributes.position.count : 0;
+        const hasIndex = geometry.index !== null;
+        const faceCount = hasIndex ? geometry.index.count / 3 : 0;
+
+        if (vertCount === 0) {
+          setStatus('PLY file has no readable vertex data.');
+          loadingEl.style.display = 'none';
+          return;
+        }
+
+        let object;
+        const colorAttr = geometry.getAttribute('color');
+        const hasRealColor = colorAttr && colorAttr.count === vertCount;
+
+        if (hasIndex && faceCount > 0) {
+          // Normal mesh with faces
+          if (!geometry.hasAttribute('normal')) {
+            geometry.computeVertexNormals();
+          }
+          const material = hasRealColor
+            ? new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7, side: THREE.DoubleSide })
+            : (() => { const m = defaultMaterial(); m.side = THREE.DoubleSide; return m; })();
+          object = new THREE.Mesh(geometry, material);
+          setStatus('Loaded: ' + file.name + ' (' + vertCount + ' verts, ' + Math.round(faceCount) + ' faces)');
+        } else {
+          // No faces present — render as a point cloud so it's still visible
+          const material = hasRealColor
+            ? new THREE.PointsMaterial({ vertexColors: true, size: 0.02 })
+            : new THREE.PointsMaterial({ color: 0xcaa45c, size: 0.02 });
+          object = new THREE.Points(geometry, material);
+          setStatus('Loaded: ' + file.name + ' as point cloud (' + vertCount + ' points, no face data found)');
+        }
+
+        addMeshToScene(object);
+      } catch (err) {
+        setStatus('Failed to parse PLY: ' + err.message);
+      }
+      loadingEl.style.display = 'none';
+    };
+    reader.readAsArrayBuffer(file);
+
+  } else if (ext === 'glb' || ext === 'gltf') {
+    reader.onload = (e) => {
+      const loader = new GLTFLoader();
+      loader.parse(e.target.result, '', (gltf) => {
+        addMeshToScene(gltf.scene);
+        setStatus('Loaded: ' + file.name);
+        loadingEl.style.display = 'none';
+      }, (err) => {
+        setStatus('Failed to parse GLB/GLTF: ' + err.message);
+        loadingEl.style.display = 'none';
+      });
+    };
+    reader.readAsArrayBuffer(file);
+
+  } else {
+    setStatus('Unsupported file type: .' + ext);
+    loadingEl.style.display = 'none';
+  }
+}
+
+// Each upload entry point (centered welcome, top bar, floating post-upload
+// button) now has its own real, directly-tappable file input layered
+// invisibly on top of the visible button — see .upload-input-overlay CSS.
+// This avoids relying on a JS-driven click() on a separate hidden input,
+// which could be silently blocked or delayed on some Android browsers.
+function handleFileInputChange(e) {
+  const file = e.target.files[0];
+  if (file) loadFile(file);
+  // Reset so selecting the exact same file again still fires 'change'.
+  e.target.value = '';
+}
+fileInputCenter.addEventListener('change', handleFileInputChange);
+fileInputTopbar.addEventListener('change', handleFileInputChange);
+fileInputFloating.addEventListener('change', handleFileInputChange);
+
+// Drive the visual "pressed" animation from the real overlay input, since
+// the visible button itself has pointer-events disabled (so taps always
+// land on the real file input, not the decorative button on top of it).
+function wirePressAnimation(inputEl) {
+  const btn = inputEl.previousElementSibling;
+  if (!btn) return;
+  const press = () => btn.classList.add('pressed');
+  const release = () => btn.classList.remove('pressed');
+  inputEl.addEventListener('touchstart', press, { passive: true });
+  inputEl.addEventListener('touchend', release);
+  inputEl.addEventListener('touchcancel', release);
+  inputEl.addEventListener('mousedown', press);
+  inputEl.addEventListener('mouseup', release);
+  inputEl.addEventListener('mouseleave', release);
+}
+wirePressAnimation(fileInputCenter);
+wirePressAnimation(fileInputTopbar);
+wirePressAnimation(fileInputFloating);
+
+// Handle window resize
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// Animation loop
+let renderingPaused = false;
+
+function animate() {
+  requestAnimationFrame(animate);
+  if (renderingPaused) return;
+  controls.update();
+  if (typeof updateMeasureMarkerScale === 'function' && measureMarkers.length > 0) {
+    updateMeasureMarkerScale();
+  }
+  renderer.render(scene, camera);
+}
+animate();
+
+// Register service worker for offline support
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').then(() => {
+      console.log('Service worker registered — app now works offline.');
+    }).catch((err) => {
+      console.warn('Service worker registration failed:', err);
+    });
+  });
+}
+
+// Try to lock orientation to portrait (only works when installed as standalone app)
+if (screen.orientation && screen.orientation.lock) {
+  screen.orientation.lock('portrait').catch(() => {
+    // Locking isn't allowed in a regular browser tab — only works when installed.
+  });
+}
+</script>
+
+</body>
+</html>
