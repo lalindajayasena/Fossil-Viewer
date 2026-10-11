@@ -360,14 +360,24 @@
   body.subtitles-active #floatingUploadBtn .upload-btn-label {
     display: none;
   }
-  /* Move the subtitle bar's close button into the screen corner instead of
-     sitting inline right under the caption text, keeping the center of
-     the screen clear for the model. */
+  /* Move the subtitle bar's close button to the bottom-left corner — clear
+     of the caption text at the top, and clear of the upload button which
+     also lives in the bottom-right during subtitle mode. Semi-transparent
+     so it stays unobtrusive while still easy to find and tap. */
   body.subtitles-active #subtitleControls {
     position: fixed;
-    top: 14px;
-    right: 14px;
+    top: auto;
+    bottom: 14px;
+    left: 14px;
+    right: auto;
     z-index: 46;
+  }
+  body.subtitles-active #subtitleControls button {
+    opacity: 0.45;
+    background: var(--panel-bg);
+  }
+  body.subtitles-active #subtitleControls button:active {
+    opacity: 0.9;
   }
 
   #loading {
