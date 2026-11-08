@@ -58,6 +58,11 @@
     background: var(--bg);
     font-family: -apple-system, Roboto, Arial, sans-serif;
   }
+  #canvas-container canvas {
+    display: block;   /* inline canvases leave a few px of gap underneath */
+    width: 100%;
+    height: 100%;
+  }
   #canvas-container {
     position: fixed;
     top: 0;
@@ -662,7 +667,7 @@
   <div id="centerUploadHint">Supports STL, OBJ, PLY, GLB</div>
   <div id="centerUploadMsg"></div>
   <button type="button" id="updateAppBtn">⟳ Check for app update</button>
-  <div id="appVersionLabel">Version v45</div>
+  <div id="appVersionLabel">Version v46</div>
 </div>
 
 <div id="topbar">
@@ -924,6 +929,19 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 0.9;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 container.appendChild(renderer.domElement);
+
+// Fit the 3D view to the box it actually lives in (not window.innerHeight,
+// which can differ from the visible area on phones with browser bars or
+// when fullscreen is toggled). CSS makes the canvas fill the box; this only
+// sets the drawing resolution.
+function fitRenderer() {
+  const w = Math.max(container.clientWidth, 1);
+  const h = Math.max(container.clientHeight, 1);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h, false);
+}
+fitRenderer();
 
 // Lights
 scene.add(new THREE.AmbientLight(0xffffff, 0.45));
@@ -2647,11 +2665,12 @@ document.getElementById('updateAppBtn').addEventListener('click', async () => {
 });
 
 // Handle window resize
-window.addEventListener('resize', () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-});
+window.addEventListener('resize', fitRenderer);
+window.addEventListener('orientationchange', fitRenderer);
+document.addEventListener('fullscreenchange', fitRenderer);
+document.addEventListener('webkitfullscreenchange', fitRenderer);
+if (window.visualViewport) window.visualViewport.addEventListener('resize', fitRenderer);
+if (window.ResizeObserver) new ResizeObserver(fitRenderer).observe(container);
 
 // Animation loop
 let renderingPaused = false;
