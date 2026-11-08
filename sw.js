@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fossil-viewer-v42';
+const CACHE_NAME = 'fossil-viewer-v44';
 
 const URLS_TO_CACHE = [
   './',
@@ -53,7 +53,10 @@ self.addEventListener('fetch', (event) => {
     // Network-first for the app's own files, so updates always take effect
     // immediately instead of being stuck behind an old cached copy.
     event.respondWith(
-      fetch(event.request).then((networkResponse) => {
+      // cache: 'no-store' skips the browser's own HTTP cache. GitHub Pages tells
+      // browsers to keep files for ~10 minutes, which made fresh uploads look
+      // unchanged even though this was meant to be 'network-first'.
+      fetch(event.request, { cache: 'no-store' }).then((networkResponse) => {
         if (networkResponse && networkResponse.status === 200) {
           const clone = networkResponse.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));

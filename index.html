@@ -2,7 +2,7 @@
 <html lang="en" data-theme="light">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>LDJ 3D Viewer</title>
 <link rel="manifest" href="./manifest.json">
 <link rel="icon" type="image/png" href="./icon.png">
@@ -59,8 +59,12 @@
     font-family: -apple-system, Roboto, Arial, sans-serif;
   }
   #canvas-container {
+    position: fixed;
+    top: 0;
+    left: 0;
     width: 100%;
     height: 100%;
+    height: 100dvh;
   }
   #topbar {
     position: fixed;
@@ -109,6 +113,23 @@
   }
   /* Once a model is loaded, hide the centered welcome screen and use the
      small upload button already in the top bar instead. */
+  #updateAppBtn {
+    margin-top: 14px;
+    background: transparent;
+    border: 1px solid var(--icon-border);
+    color: var(--text-secondary);
+    border-radius: 16px;
+    padding: 7px 14px;
+    font-size: 12.5px;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  #updateAppBtn:active { background: var(--icon-pressed-bg); }
+  #appVersionLabel {
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
   #centerUpload.hidden {
     display: none;
   }
@@ -316,22 +337,35 @@
       0 1px 3px var(--bg),
       0 0 8px var(--bg);
   }
+  /* A true direct child of <body>, fixed to the actual bottom-left corner
+     of the screen — not nested inside the (transformed) subtitle bar, so
+     its position is never thrown off by that transform. Hidden by default;
+     only shown while subtitles are active (see body.subtitles-active below). */
   #subtitleControls {
-    display: flex;
+    position: fixed;
+    bottom: 14px;
+    left: 14px;
+    z-index: 46;
+    display: none;
     gap: 8px;
   }
+  body.subtitles-active #subtitleControls {
+    display: flex;
+  }
   #subtitleControls button {
-    background: var(--icon-bg);
-    color: var(--icon-text);
-    border: 1px solid var(--icon-border);
+    background: transparent;
+    color: var(--text-primary);
+    border: none;
     width: 34px;
     height: 34px;
     border-radius: 50%;
     font-size: 14px;
     cursor: pointer;
+    opacity: 0.45;
   }
   #subtitleControls button:active {
-    background: var(--icon-pressed-bg);
+    opacity: 0.9;
+    background: rgba(128,128,128,0.2);
   }
 
   /* --- Subtitle mode: maximize the visible model area --- */
@@ -341,7 +375,7 @@
     display: none !important;
   }
   /* The upload button is rarely needed mid-playback — shrink it to a
-     small icon-only circle, tucked out of the way. */
+     small, transparent icon-only circle, tucked out of the way. */
   body.subtitles-active #floatingUploadWrap {
     right: 10px;
     bottom: 10px;
@@ -356,28 +390,17 @@
     justify-content: center;
     overflow: hidden;
     white-space: nowrap;
+    background: transparent;
+    box-shadow: none;
+    opacity: 0.45;
+    color: var(--text-primary);
+  }
+  body.subtitles-active #floatingUploadBtn:active {
+    opacity: 0.9;
+    background: rgba(128,128,128,0.2);
   }
   body.subtitles-active #floatingUploadBtn .upload-btn-label {
     display: none;
-  }
-  /* Move the subtitle bar's close button to the bottom-left corner — clear
-     of the caption text at the top, and clear of the upload button which
-     also lives in the bottom-right during subtitle mode. Semi-transparent
-     so it stays unobtrusive while still easy to find and tap. */
-  body.subtitles-active #subtitleControls {
-    position: fixed;
-    top: auto;
-    bottom: 14px;
-    left: 14px;
-    right: auto;
-    z-index: 46;
-  }
-  body.subtitles-active #subtitleControls button {
-    opacity: 0.45;
-    background: var(--panel-bg);
-  }
-  body.subtitles-active #subtitleControls button:active {
-    opacity: 0.9;
   }
 
   #loading {
@@ -629,6 +652,8 @@
     <input type="file" class="upload-input-overlay" id="fileInputCenter" accept=".stl,.obj,.ply,.glb,.gltf">
   </div>
   <div id="centerUploadHint">Supports STL, OBJ, PLY, GLB</div>
+  <button type="button" id="updateAppBtn">⟳ Check for app update</button>
+  <div id="appVersionLabel">Version v44</div>
 </div>
 
 <div id="topbar">
@@ -774,9 +799,19 @@
      underneath, this just floats text over it. -->
 <div id="subtitleBar">
   <div id="subtitleText"></div>
-  <div id="subtitleControls">
-    <button id="subtitleCloseBtn" title="Close subtitles">✕</button>
-  </div>
+</div>
+
+<!-- Kept as a separate, direct child of <body> rather than nested inside
+     #subtitleBar: that element has a CSS transform on it for centering,
+     and a transform on an ancestor makes any position:fixed descendant
+     position itself relative to THAT element instead of the real screen —
+     which was why this control bar was stuck near the caption text
+     instead of a true corner of the screen. -->
+<div id="subtitleControls">
+  <button id="subtitlePrevBtn" title="Previous line">⏮</button>
+  <button id="subtitlePlayPauseBtn" title="Play / Pause">⏸</button>
+  <button id="subtitleNextBtn" title="Next line">⏭</button>
+  <button id="subtitleCloseBtn" title="Close subtitles">✕</button>
 </div>
 
 <!-- Standalone button, separate from the icon toolbar, for reading the saved description -->
@@ -2180,6 +2215,8 @@ function stepSubtitle(forward) {
 function playSubtitles() {
   if (subtitleLines.length === 0) return;
   subtitlePlaying = true;
+  const btn = document.getElementById('subtitlePlayPauseBtn');
+  if (btn) btn.textContent = '⏸';
   clearInterval(subtitleTimer);
   subtitleTimer = setInterval(() => {
     if (subtitleIndex >= subtitleLines.length - 1) {
@@ -2192,7 +2229,35 @@ function playSubtitles() {
 
 function pauseSubtitles() {
   subtitlePlaying = false;
+  const btn = document.getElementById('subtitlePlayPauseBtn');
+  if (btn) btn.textContent = '▶';
   clearInterval(subtitleTimer);
+}
+
+// Real browser fullscreen: hides the phone's status bar and navigation bar so
+// the model can use the whole physical screen while subtitles play. Browsers
+// only allow this when requested directly from a tap, so it is called
+// synchronously from the button's click handler. Failure is harmless.
+function enterBrowserFullscreen() {
+  try {
+    const el = document.documentElement;
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (req && !document.fullscreenElement && !document.webkitFullscreenElement) {
+      const result = req.call(el);
+      if (result && result.catch) result.catch(() => {});
+    }
+  } catch (e) { /* fullscreen not available, carry on without it */ }
+}
+function exitBrowserFullscreen() {
+  try {
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+      const exit = document.exitFullscreen || document.webkitExitFullscreen;
+      if (exit) {
+        const result = exit.call(document);
+        if (result && result.catch) result.catch(() => {});
+      }
+    }
+  } catch (e) { /* ignore */ }
 }
 
 function openSubtitles() {
@@ -2226,6 +2291,7 @@ function closeSubtitles() {
   pauseSubtitles();
   subtitleBar.classList.remove('active');
   document.body.classList.remove('subtitles-active');
+  exitBrowserFullscreen();
   if (typeof toggleFullView === 'function' && isFullView) {
     toggleFullView(true);
   }
@@ -2235,12 +2301,32 @@ document.getElementById('subtitleBtn').addEventListener('click', () => {
   if (subtitleBar.classList.contains('active')) {
     closeSubtitles();
   } else {
+    if (currentFileName) enterBrowserFullscreen();
     openSubtitles();
   }
 });
 
 document.getElementById('subtitleCloseBtn').addEventListener('click', () => {
   closeSubtitles();
+});
+
+document.getElementById('subtitlePrevBtn').addEventListener('click', () => {
+  pauseSubtitles();
+  stepSubtitle(false);
+});
+
+document.getElementById('subtitlePlayPauseBtn').addEventListener('click', () => {
+  if (subtitlePlaying) {
+    pauseSubtitles();
+  } else {
+    if (subtitleIndex >= subtitleLines.length - 1) subtitleIndex = -1; // restart from beginning if at the end
+    playSubtitles();
+  }
+});
+
+document.getElementById('subtitleNextBtn').addEventListener('click', () => {
+  pauseSubtitles();
+  stepSubtitle(true);
 });
 
 document.querySelectorAll('.panel-close').forEach((btn) => {
@@ -2475,6 +2561,27 @@ function wirePressAnimation(inputEl) {
 wirePressAnimation(fileInputCenter);
 wirePressAnimation(fileInputTopbar);
 wirePressAnimation(fileInputFloating);
+
+// ---------- SAFE APP UPDATE ----------
+// Clears the app's cached copy and the service worker, then reloads, so the
+// newest uploaded version is fetched. Saved descriptions live in IndexedDB,
+// which this deliberately does NOT touch — unlike "Clear site data" in the
+// browser settings, which wipes them.
+document.getElementById('updateAppBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('updateAppBtn');
+  btn.textContent = 'Updating…';
+  try {
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map((r) => r.unregister()));
+    }
+    if (window.caches) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+    }
+  } catch (e) { /* reload anyway */ }
+  location.reload();
+});
 
 // Handle window resize
 window.addEventListener('resize', () => {
