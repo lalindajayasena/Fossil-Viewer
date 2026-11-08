@@ -113,6 +113,14 @@
   }
   /* Once a model is loaded, hide the centered welcome screen and use the
      small upload button already in the top bar instead. */
+  #centerUploadMsg {
+    margin-top: 12px;
+    max-width: 300px;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+  }
+  #centerUploadMsg.error { color: #c0392b; }
   #updateAppBtn {
     margin-top: 14px;
     background: transparent;
@@ -652,8 +660,9 @@
     <input type="file" class="upload-input-overlay" id="fileInputCenter" accept=".stl,.obj,.ply,.glb,.gltf">
   </div>
   <div id="centerUploadHint">Supports STL, OBJ, PLY, GLB</div>
+  <div id="centerUploadMsg"></div>
   <button type="button" id="updateAppBtn">⟳ Check for app update</button>
-  <div id="appVersionLabel">Version v44</div>
+  <div id="appVersionLabel">Version v45</div>
 </div>
 
 <div id="topbar">
@@ -1473,6 +1482,7 @@ function addMeshToScene(mesh) {
   frameModel(mesh);
   document.getElementById('toolRow').style.display = 'flex';
   document.getElementById('centerUpload').classList.add('hidden');
+  ldjPickerMark('done');
   document.getElementById('topbar').classList.add('model-loaded');
   document.getElementById('floatingUploadWrap').classList.add('visible');
   updateProperties(mesh, currentFileName, currentFileSize);
@@ -2402,6 +2412,13 @@ exitFullViewBtn.addEventListener('click', () => {
 
 function setStatus(text) {
   statusEl.textContent = text;
+  // The top status line is easy to miss, so while the welcome screen is
+  // showing, mirror the message there too.
+  const msgEl = document.getElementById('centerUploadMsg');
+  if (msgEl) {
+    msgEl.textContent = text;
+    msgEl.classList.toggle('error', /error|failed|could not|too big|restart/i.test(text));
+  }
 }
 
 function loadFile(file) {
@@ -2421,9 +2438,13 @@ function loadFile(file) {
   loadingEl.style.display = 'block';
   setStatus('Loading: ' + file.name);
 
+  const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+  setStatus('Loading: ' + file.name + ' (' + sizeMB + ' MB)');
   reader.onerror = () => {
     loadingEl.style.display = 'none';
-    setStatus('Error reading file.');
+    const why = reader.error && reader.error.name ? ' (' + reader.error.name + ')' : '';
+    setStatus('Error reading file' + why + '. Try picking it again.');
+    ldjPickerMark('error');
   };
 
   if (ext === 'stl') {
@@ -2535,10 +2556,52 @@ function loadFile(file) {
 // which could be silently blocked or delayed on some Android browsers.
 function handleFileInputChange(e) {
   const file = e.target.files[0];
-  if (file) loadFile(file);
-  // Reset so selecting the exact same file again still fires 'change'.
-  e.target.value = '';
+  if (file) {
+    ldjPickerMark('received:' + file.name + ':' + (file.size / (1024 * 1024)).toFixed(1) + ' MB');
+    loadFile(file);
+  }
+  // NOTE: the input is deliberately NOT cleared here. Clearing it right after
+  // a pick can invalidate the file on Android before it has been read. It is
+  // cleared on the next tap instead (see below), so picking the same file
+  // twice still works.
 }
+
+// ---------- FILE PICKER DIAGNOSTICS ----------
+// On a low-memory phone, Android can restart this page while the file picker
+// is in front. Leave a breadcrumb so the next start can say what happened.
+function ldjPickerMark(state) {
+  try { localStorage.setItem('ldjPickerState', JSON.stringify({ state, t: Date.now() })); } catch (e) { /* ignore */ }
+}
+[fileInputCenter, fileInputTopbar, fileInputFloating].forEach((inp) => {
+  inp.addEventListener('click', () => {
+    inp.value = '';            // allow re-picking the same file
+    ldjPickerMark('opened');
+  });
+  inp.addEventListener('cancel', () => ldjPickerMark('cancelled'));
+});
+document.addEventListener('visibilitychange', () => {
+  // If this page is still alive when the picker closes, nothing was killed.
+  if (document.visibilityState === 'visible') {
+    try {
+      const s = JSON.parse(localStorage.getItem('ldjPickerState') || 'null');
+      if (s && s.state === 'opened') ldjPickerMark('returned');
+    } catch (e) { /* ignore */ }
+  }
+});
+(function reportPreviousPickerProblem() {
+  try {
+    const s = JSON.parse(localStorage.getItem('ldjPickerState') || 'null');
+    if (!s || Date.now() - s.t > 10 * 60 * 1000) return;
+    if (s.state === 'opened') {
+      setStatus('The page restarted while the file picker was open, so no file arrived. Your phone is probably short of memory: close other apps, then try again.');
+    } else if (s.state.indexOf('received:') === 0) {
+      const parts = s.state.split(':');
+      setStatus('The page restarted while loading ' + parts[1] + ' (' + parts[2] + '). That file is probably too big for the memory available. Try a smaller or compressed version.');
+    }
+    ldjPickerMark('reported');
+  } catch (e) { /* ignore */ }
+})();
+
 fileInputCenter.addEventListener('change', handleFileInputChange);
 fileInputTopbar.addEventListener('change', handleFileInputChange);
 fileInputFloating.addEventListener('change', handleFileInputChange);
