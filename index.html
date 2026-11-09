@@ -365,6 +365,36 @@
   body.subtitles-active #subtitleControls {
     display: flex;
   }
+  #subtitleControls {
+    align-items: center;
+    touch-action: none;   /* lets the whole pack be dragged without the page scrolling */
+  }
+  #subtitleGrip {
+    width: 26px;
+    text-align: center;
+    font-size: 18px;
+    color: var(--text-primary);
+    opacity: 0.45;
+    cursor: grab;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  #toast {
+    position: fixed;
+    top: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: 88%;
+    padding: 8px 14px;
+    border-radius: 14px;
+    background: rgba(30,28,25,0.85);
+    color: #fff;
+    font-size: 12.5px;
+    line-height: 1.4;
+    text-align: center;
+    z-index: 60;
+    display: none;
+  }
   #subtitleControls button {
     background: transparent;
     color: var(--text-primary);
@@ -667,7 +697,7 @@
   <div id="centerUploadHint">Supports STL, OBJ, PLY, GLB</div>
   <div id="centerUploadMsg"></div>
   <button type="button" id="updateAppBtn">⟳ Check for app update</button>
-  <div id="appVersionLabel">Version v46</div>
+  <div id="appVersionLabel">Version v47</div>
 </div>
 
 <div id="topbar">
@@ -792,6 +822,8 @@
   <div id="scaleStatus" style="font-size:12px; color:var(--text-secondary); margin-top:8px;"></div>
 </div>
 
+<div id="toast"></div>
+
 <div id="loading">
   <div id="loadingText">Please wait, your 3D object is being uploaded...</div>
   <div id="loadingInstructions">
@@ -822,6 +854,7 @@
      which was why this control bar was stuck near the caption text
      instead of a true corner of the screen. -->
 <div id="subtitleControls">
+  <span id="subtitleGrip" title="Drag to move">⠿</span>
   <button id="subtitlePrevBtn" title="Previous line">⏮</button>
   <button id="subtitlePlayPauseBtn" title="Play / Pause">⏸</button>
   <button id="subtitleNextBtn" title="Next line">⏭</button>
@@ -862,6 +895,7 @@ import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 const container = document.getElementById('canvas-container');
+const APP_VERSION = 'v47';
 const statusEl = document.getElementById('status');
 const loadingEl = document.getElementById('loading');
 
@@ -2008,7 +2042,8 @@ function updateProperties(mesh, fileName, fileSize) {
     ['Faces', Math.round(faceCount).toLocaleString()],
     ['Width (X)', size.x.toFixed(3)],
     ['Height (Y)', size.y.toFixed(3)],
-    ['Depth (Z)', size.z.toFixed(3)]
+    ['Depth (Z)', size.z.toFixed(3)],
+    ['App version', APP_VERSION]
   ];
 
   const table = document.getElementById('propsTable');
@@ -2266,13 +2301,30 @@ function pauseSubtitles() {
 // the model can use the whole physical screen while subtitles play. Browsers
 // only allow this when requested directly from a tap, so it is called
 // synchronously from the button's click handler. Failure is harmless.
+let toastTimer = null;
+function showToast(msg, ms) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.display = 'block';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.style.display = 'none'; }, ms || 4500);
+}
+function ldjFullscreenFailed() {
+  if (!document.body.classList.contains('subtitles-active')) return;
+  showToast("This browser wouldn't hide the phone's top/bottom bars, so they stay visible here. Try opening the app in Chrome.", 6500);
+}
+
 function enterBrowserFullscreen() {
   try {
     const el = document.documentElement;
     const req = el.requestFullscreen || el.webkitRequestFullscreen;
     if (req && !document.fullscreenElement && !document.webkitFullscreenElement) {
       const result = req.call(el);
-      if (result && result.catch) result.catch(() => {});
+      if (result && result.catch) result.catch(() => ldjFullscreenFailed());
+      // Some browsers accept the request but never switch; check a moment later.
+      setTimeout(() => {
+        if (!document.fullscreenElement && !document.webkitFullscreenElement) ldjFullscreenFailed();
+      }, 900);
     }
   } catch (e) { /* fullscreen not available, carry on without it */ }
 }
@@ -2312,6 +2364,7 @@ function openSubtitles() {
     // shrink the upload button, and let the model use the space normally
     // reserved for the top/bottom toolbars.
     document.body.classList.add('subtitles-active');
+    requestAnimationFrame(restoreSubCtrlPos);
   });
 }
 
@@ -2332,6 +2385,65 @@ document.getElementById('subtitleBtn').addEventListener('click', () => {
     if (currentFileName) enterBrowserFullscreen();
     openSubtitles();
   }
+});
+
+// ---------- MOVABLE SUBTITLE CONTROL PACK ----------
+// Press and drag anywhere on the pack (or its ⠿ grip) to move it. A normal
+// tap on a button still works; only a drag of 10+ px moves the pack, and its
+// position is remembered between sessions.
+const SUB_CTRL_POS_KEY = 'ldjSubtitleControlsPos';
+const subtitleControlsEl = document.getElementById('subtitleControls');
+
+function clampSubCtrl(x, y) {
+  const w = subtitleControlsEl.offsetWidth || 210;
+  const hgt = subtitleControlsEl.offsetHeight || 34;
+  const m = 4;
+  return {
+    x: Math.min(Math.max(x, m), Math.max(window.innerWidth - w - m, m)),
+    y: Math.min(Math.max(y, m), Math.max(window.innerHeight - hgt - m, m))
+  };
+}
+function placeSubCtrl(x, y) {
+  subtitleControlsEl.style.left = x + 'px';
+  subtitleControlsEl.style.top = y + 'px';
+  subtitleControlsEl.style.bottom = 'auto';
+  subtitleControlsEl.style.right = 'auto';
+}
+function restoreSubCtrlPos() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(SUB_CTRL_POS_KEY) || 'null');
+    if (!saved) return;
+    const c = clampSubCtrl(saved.x, saved.y);
+    placeSubCtrl(c.x, c.y);
+  } catch (e) { /* keep default corner */ }
+}
+let subDrag = null;
+subtitleControlsEl.addEventListener('pointerdown', (e) => {
+  const r = subtitleControlsEl.getBoundingClientRect();
+  subDrag = { id: e.pointerId, sx: e.clientX, sy: e.clientY, ox: e.clientX - r.left, oy: e.clientY - r.top, moving: false };
+});
+subtitleControlsEl.addEventListener('pointermove', (e) => {
+  if (!subDrag || e.pointerId !== subDrag.id) return;
+  if (!subDrag.moving) {
+    if (Math.hypot(e.clientX - subDrag.sx, e.clientY - subDrag.sy) < 10) return;
+    subDrag.moving = true;
+    // Capture only once a real drag starts, so plain taps still reach the buttons.
+    try { subtitleControlsEl.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+  }
+  const c = clampSubCtrl(e.clientX - subDrag.ox, e.clientY - subDrag.oy);
+  placeSubCtrl(c.x, c.y);
+});
+function endSubCtrlDrag() {
+  if (subDrag && subDrag.moving) {
+    const r = subtitleControlsEl.getBoundingClientRect();
+    try { localStorage.setItem(SUB_CTRL_POS_KEY, JSON.stringify({ x: r.left, y: r.top })); } catch (e) { /* ignore */ }
+  }
+  subDrag = null;
+}
+subtitleControlsEl.addEventListener('pointerup', endSubCtrlDrag);
+subtitleControlsEl.addEventListener('pointercancel', endSubCtrlDrag);
+window.addEventListener('resize', () => {
+  if (subtitleControlsEl.style.left) restoreSubCtrlPos();
 });
 
 document.getElementById('subtitleCloseBtn').addEventListener('click', () => {
