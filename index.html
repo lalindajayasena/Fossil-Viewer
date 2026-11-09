@@ -64,6 +64,7 @@
     height: 100%;
   }
   #canvas-container {
+    z-index: 1;
     position: fixed;
     top: 0;
     left: 0;
@@ -379,6 +380,55 @@
     user-select: none;
     -webkit-user-select: none;
   }
+  /* --- Background picture slideshow (sits behind the transparent 3D canvas) --- */
+  #bgSlideshow {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 0;
+    display: none;
+    pointer-events: none;
+    background: var(--bg);
+  }
+  #bgSlideshow.active { display: block; }
+  #bgSlideshow::after {          /* optional dimming so buttons and subtitles stay readable */
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,var(--bg-dim, 0.2));
+  }
+  .bg-layer {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background-size: cover;
+    background-position: center;
+    opacity: 0;
+    transition: opacity 1.2s ease;
+  }
+  .bg-layer.visible { opacity: 1; }
+  #bgThumbs { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+  .bg-thumb {
+    position: relative;
+    width: 64px; height: 64px;
+    border-radius: 8px;
+    background-size: cover;
+    background-position: center;
+    border: 1px solid var(--icon-border);
+  }
+  .bg-thumb button {
+    position: absolute;
+    top: -7px; right: -7px;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    border: none;
+    background: #c0392b;
+    color: #fff;
+    font-size: 11px;
+    padding: 0;
+    cursor: pointer;
+  }
+  #bgNote, #bgCountNote { font-size: 12px; color: var(--text-secondary); margin-top: 8px; line-height: 1.5; }
   #toast {
     position: fixed;
     top: 14px;
@@ -683,6 +733,7 @@
 </head>
 <body>
 
+<div id="bgSlideshow"><div class="bg-layer" id="bgLayerA"></div><div class="bg-layer" id="bgLayerB"></div></div>
 <div id="canvas-container"></div>
 
 <!-- Centered "no model yet" welcome screen — this is the main, easy-to-reach
@@ -697,7 +748,7 @@
   <div id="centerUploadHint">Supports STL, OBJ, PLY, GLB</div>
   <div id="centerUploadMsg"></div>
   <button type="button" id="updateAppBtn">⟳ Check for app update</button>
-  <div id="appVersionLabel">Version v47</div>
+  <div id="appVersionLabel">Version v48</div>
 </div>
 
 <div id="topbar">
@@ -724,6 +775,7 @@
     <button class="btn-icon" id="customizeBtn" title="Customize toolbar">⚙</button>
     <button class="btn-icon" id="scaleBtn" title="Set real-world scale">📐</button>
     <button class="btn-icon" id="subtitleBtn" title="Play description as subtitles">💬</button>
+    <button class="btn-icon" id="bgBtn" title="Background pictures">🖼</button>
     <button class="btn-icon" id="invertRotateBtn" title="Flip rotation direction">⇄</button>
     <button class="btn-icon" id="themeToggleBtn" title="Toggle dark mode">🌙</button>
     <button class="btn-icon" id="fullscreenBtn" title="Full view">⛶</button>
@@ -822,6 +874,36 @@
   <div id="scaleStatus" style="font-size:12px; color:var(--text-secondary); margin-top:8px;"></div>
 </div>
 
+<!-- Background pictures panel -->
+<div class="panel" id="bgPanel">
+  <div class="panel-title">Background pictures <button class="panel-close" data-close="bgPanel">✕</button></div>
+  <div class="upload-btn-wrap" id="bgAddWrap">
+    <button type="button" class="btn">🖼 Add pictures</button>
+    <input type="file" class="upload-input-overlay" id="bgFileInput" accept="image/*" multiple>
+  </div>
+  <div id="bgCountNote"></div>
+  <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--icon-text); margin-top:10px;">
+    <input type="checkbox" id="bgEnabled"> Show pictures behind the model
+  </label>
+  <div class="slider-row">
+    <span class="slider-label">Change every</span>
+    <select id="bgInterval" style="flex:1; padding:6px; background:var(--panel-bg); color:var(--text-primary); border:1px solid var(--icon-border); border-radius:6px;">
+      <option value="5">5 seconds</option>
+      <option value="10">10 seconds</option>
+      <option value="15">15 seconds</option>
+      <option value="30">30 seconds</option>
+      <option value="60">1 minute</option>
+    </select>
+  </div>
+  <div class="slider-row">
+    <span class="slider-label">Dim picture</span>
+    <input type="range" id="bgDim" min="0" max="70" value="20">
+  </div>
+  <div id="bgThumbs"></div>
+  <button type="button" class="btn" id="bgClearBtn" style="margin-top:12px;">Remove all pictures</button>
+  <div id="bgNote"></div>
+</div>
+
 <div id="toast"></div>
 
 <div id="loading">
@@ -895,7 +977,9 @@ import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 const container = document.getElementById('canvas-container');
-const APP_VERSION = 'v47';
+const APP_VERSION = 'v48';
+// True while background pictures are showing; the 3D scene then becomes see-through.
+let bgSlideshowActive = false;
 const statusEl = document.getElementById('status');
 const loadingEl = document.getElementById('loading');
 
@@ -934,11 +1018,19 @@ try {
   if (savedTheme === 'light' || savedTheme === 'dark') currentTheme = savedTheme;
 } catch (e) { /* default to light */ }
 
+function updateSceneBackground() {
+  if (bgSlideshowActive) {
+    scene.background = null;   // see-through, so the pictures behind the canvas show
+  } else {
+    scene.background = new THREE.Color(currentTheme === 'dark' ? 0x1c1b19 : 0xf2efe9);
+  }
+}
+
 function applyTheme(theme) {
   currentTheme = theme;
   document.documentElement.setAttribute('data-theme', theme);
   document.getElementById('themeColorMeta').setAttribute('content', theme === 'dark' ? '#1c1b19' : '#f2efe9');
-  scene.background = new THREE.Color(theme === 'dark' ? 0x1c1b19 : 0xf2efe9);
+  updateSceneBackground();
   try { localStorage.setItem('ldjTheme', theme); } catch (e) { /* ignore */ }
 }
 
@@ -954,7 +1046,7 @@ const cameraLight = new THREE.PointLight(0xffffff, 0.8, 0, 0.3);
 camera.add(cameraLight);
 scene.add(camera);
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
@@ -2060,7 +2152,8 @@ const panels = {
   propsPanel: document.getElementById('propsPanel'),
   descPanel: document.getElementById('descPanel'),
   customizePanel: document.getElementById('customizePanel'),
-  scalePanel: document.getElementById('scalePanel')
+  scalePanel: document.getElementById('scalePanel'),
+  bgPanel: document.getElementById('bgPanel')
 };
 
 function closeAllPanels() {
@@ -2072,6 +2165,7 @@ function closeAllPanels() {
   document.getElementById('descBtn').classList.remove('active');
   document.getElementById('customizeBtn').classList.remove('active');
   document.getElementById('scaleBtn').classList.remove('active');
+  document.getElementById('bgBtn').classList.remove('active');
   interactionMode = 'none';
 }
 
@@ -2112,7 +2206,8 @@ const BUTTON_LABELS = {
   scaleBtn: 'Set Real-World Scale',
   invertRotateBtn: 'Flip Rotation Direction',
   themeToggleBtn: 'Dark / Light Mode',
-  subtitleBtn: 'Play Description as Subtitles'
+  subtitleBtn: 'Play Description as Subtitles',
+  bgBtn: 'Background Pictures'
 };
 
 function getCurrentToolbarOrder() {
@@ -2139,6 +2234,10 @@ function loadSavedToolbarOrder() {
     if (saved) {
       const order = JSON.parse(saved);
       applyToolbarOrder(order);
+      // Buttons added after the order was saved go at the end, not the front.
+      Array.from(toolRowEl.children)
+        .filter((el) => !order.includes(el.id))
+        .forEach((el) => toolRowEl.appendChild(el));
     }
   } catch (e) { /* ignore, keep default order */ }
 }
@@ -2754,6 +2853,222 @@ function wirePressAnimation(inputEl) {
 wirePressAnimation(fileInputCenter);
 wirePressAnimation(fileInputTopbar);
 wirePressAnimation(fileInputFloating);
+
+// ---------- BACKGROUND PICTURE SLIDESHOW ----------
+// Pictures are shrunk when added (a 50 MP gallery photo would need ~200 MB to
+// decode, which can crash a low-memory phone) and stored in their own small
+// database, separate from the saved descriptions.
+const BG_DB_NAME = 'ldjBackgroundsDB';
+const BG_STORE = 'images';
+const BG_MAX_IMAGES = 12;
+const BG_MAX_SIDE = 1800;
+const BG_SETTINGS_KEY = 'ldjBgSettings';
+const bgSlideshowEl = document.getElementById('bgSlideshow');
+const bgLayerA = document.getElementById('bgLayerA');
+const bgLayerB = document.getElementById('bgLayerB');
+
+let bgSettings = { enabled: true, interval: 10, dim: 20 };
+try { Object.assign(bgSettings, JSON.parse(localStorage.getItem(BG_SETTINGS_KEY) || '{}')); } catch (e) { /* defaults */ }
+function saveBgSettings() {
+  try { localStorage.setItem(BG_SETTINGS_KEY, JSON.stringify(bgSettings)); } catch (e) { /* ignore */ }
+}
+
+const bgDBReady = new Promise((resolve) => {
+  try {
+    const req = indexedDB.open(BG_DB_NAME, 1);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(BG_STORE)) db.createObjectStore(BG_STORE, { keyPath: 'id', autoIncrement: true });
+    };
+    req.onsuccess = (e) => resolve(e.target.result);
+    req.onerror = () => resolve(null);
+  } catch (e) { resolve(null); }
+});
+function bgDbGetAll() {
+  return bgDBReady.then((db) => !db ? [] : new Promise((res) => {
+    const r = db.transaction(BG_STORE, 'readonly').objectStore(BG_STORE).getAll();
+    r.onsuccess = () => res(r.result || []);
+    r.onerror = () => res([]);
+  }));
+}
+function bgDbWrite(fn) {
+  return bgDBReady.then((db) => !db ? false : new Promise((res) => {
+    const tx = db.transaction(BG_STORE, 'readwrite');
+    fn(tx.objectStore(BG_STORE));
+    tx.oncomplete = () => res(true);
+    tx.onerror = () => res(false);
+  }));
+}
+
+let bgItems = [];          // { id, name, url }
+let bgIndex = 0;
+let bgFrontIsA = false;
+let bgTimer = null;
+
+function bgRefreshItems() {
+  return bgDbGetAll().then((rows) => {
+    bgItems.forEach((i) => URL.revokeObjectURL(i.url));
+    bgItems = rows.map((r) => ({ id: r.id, name: r.name, url: URL.createObjectURL(r.blob) }));
+  });
+}
+
+function bgShowIndex(i) {
+  if (!bgItems.length) return;
+  bgIndex = ((i % bgItems.length) + bgItems.length) % bgItems.length;
+  const incoming = bgFrontIsA ? bgLayerB : bgLayerA;
+  const outgoing = bgFrontIsA ? bgLayerA : bgLayerB;
+  incoming.style.backgroundImage = 'url("' + bgItems[bgIndex].url + '")';
+  incoming.classList.add('visible');
+  outgoing.classList.remove('visible');
+  bgFrontIsA = !bgFrontIsA;
+}
+function bgStopTimer() { clearInterval(bgTimer); bgTimer = null; }
+function bgStartTimer() {
+  bgStopTimer();
+  if (bgSettings.enabled && bgItems.length > 1 && document.visibilityState === 'visible') {
+    bgTimer = setInterval(() => bgShowIndex(bgIndex + 1), bgSettings.interval * 1000);
+  }
+}
+function bgApply() {
+  const active = bgSettings.enabled && bgItems.length > 0;
+  bgSlideshowActive = active;
+  bgSlideshowEl.classList.toggle('active', active);
+  bgSlideshowEl.style.setProperty('--bg-dim', String(bgSettings.dim / 100));
+  updateSceneBackground();
+  bgStopTimer();
+  if (active) {
+    bgLayerA.classList.remove('visible');
+    bgLayerB.classList.remove('visible');
+    bgShowIndex(Math.min(bgIndex, bgItems.length - 1));
+    bgStartTimer();
+  }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') bgStartTimer(); else bgStopTimer();
+});
+
+// Shrink a gallery photo before storing it.
+async function bgPrepareImage(file) {
+  let source, w, h, cleanup = () => {};
+  try {
+    // resizeWidth lets the browser decode large JPEGs at reduced size.
+    const bmp = await createImageBitmap(file, { resizeWidth: BG_MAX_SIDE, resizeQuality: 'medium' });
+    source = bmp; w = bmp.width; h = bmp.height;
+    cleanup = () => { if (bmp.close) bmp.close(); };
+  } catch (e) {
+    const url = URL.createObjectURL(file);
+    const img = await new Promise((res, rej) => {
+      const im = new Image();
+      im.onload = () => res(im);
+      im.onerror = () => rej(new Error('unreadable'));
+      im.src = url;
+    });
+    source = img; w = img.naturalWidth; h = img.naturalHeight;
+    cleanup = () => URL.revokeObjectURL(url);
+  }
+  const scale = Math.min(1, BG_MAX_SIDE / Math.max(w, h));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(w * scale));
+  canvas.height = Math.max(1, Math.round(h * scale));
+  canvas.getContext('2d').drawImage(source, 0, 0, canvas.width, canvas.height);
+  cleanup();
+  const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', 0.85));
+  canvas.width = canvas.height = 1;   // release the pixel memory
+  if (!blob) throw new Error('could not encode');
+  return blob;
+}
+
+function renderBgThumbs() {
+  const box = document.getElementById('bgThumbs');
+  box.innerHTML = '';
+  bgItems.forEach((item) => {
+    const d = document.createElement('div');
+    d.className = 'bg-thumb';
+    d.style.backgroundImage = 'url("' + item.url + '")';
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = '✕';
+    b.title = 'Remove this picture';
+    b.addEventListener('click', async () => {
+      await bgDbWrite((store) => store.delete(item.id));
+      await bgRefreshItems();
+      bgApply();
+      renderBgThumbs();
+    });
+    d.appendChild(b);
+    box.appendChild(d);
+  });
+  document.getElementById('bgCountNote').textContent =
+    bgItems.length + ' of ' + BG_MAX_IMAGES + ' pictures saved';
+  document.getElementById('bgClearBtn').style.display = bgItems.length ? 'inline-flex' : 'none';
+}
+
+function syncBgControls() {
+  document.getElementById('bgEnabled').checked = !!bgSettings.enabled;
+  document.getElementById('bgInterval').value = String(bgSettings.interval);
+  document.getElementById('bgDim').value = String(bgSettings.dim);
+}
+
+async function bgHandleFiles(files) {
+  const note = document.getElementById('bgNote');
+  const list = Array.from(files);
+  if (!list.length) return;
+  const room = BG_MAX_IMAGES - bgItems.length;
+  if (room <= 0) {
+    note.textContent = 'You already have ' + BG_MAX_IMAGES + ' pictures. Remove one first.';
+    return;
+  }
+  const todo = list.slice(0, room);
+  let added = 0, failed = 0;
+  for (let i = 0; i < todo.length; i++) {
+    note.textContent = 'Adding picture ' + (i + 1) + ' of ' + todo.length + '…';
+    try {
+      const blob = await bgPrepareImage(todo[i]);
+      if (await bgDbWrite((store) => store.add({ blob, name: todo[i].name, addedAt: Date.now() }))) added++; else failed++;
+    } catch (e) { failed++; }
+  }
+  await bgRefreshItems();
+  if (added > 0) { bgSettings.enabled = true; saveBgSettings(); }
+  syncBgControls();
+  bgApply();
+  renderBgThumbs();
+  let msg = added ? 'Added ' + added + ' picture' + (added === 1 ? '' : 's') + '.' : 'No pictures were added.';
+  if (failed) msg += ' ' + failed + ' could not be read (some formats, such as HEIC, are not supported).';
+  if (list.length > todo.length) msg += ' Only the first ' + todo.length + ' fit within the limit of ' + BG_MAX_IMAGES + '.';
+  note.textContent = msg;
+}
+
+const bgFileInput = document.getElementById('bgFileInput');
+bgFileInput.addEventListener('click', () => { bgFileInput.value = ''; });
+bgFileInput.addEventListener('change', (e) => { bgHandleFiles(e.target.files); });
+wirePressAnimation(bgFileInput);
+
+document.getElementById('bgEnabled').addEventListener('change', (e) => {
+  bgSettings.enabled = e.target.checked;
+  saveBgSettings();
+  bgApply();
+});
+document.getElementById('bgInterval').addEventListener('change', (e) => {
+  bgSettings.interval = parseInt(e.target.value, 10) || 10;
+  saveBgSettings();
+  bgStartTimer();
+});
+document.getElementById('bgDim').addEventListener('input', (e) => {
+  bgSettings.dim = parseInt(e.target.value, 10) || 0;
+  bgSlideshowEl.style.setProperty('--bg-dim', String(bgSettings.dim / 100));
+});
+document.getElementById('bgDim').addEventListener('change', saveBgSettings);
+document.getElementById('bgClearBtn').addEventListener('click', async () => {
+  await bgDbWrite((store) => store.clear());
+  await bgRefreshItems();
+  bgApply();
+  renderBgThumbs();
+  document.getElementById('bgNote').textContent = 'All pictures removed.';
+});
+document.getElementById('bgBtn').addEventListener('click', () => togglePanel('bgPanel', 'bgBtn'));
+
+// Restore saved pictures on every start.
+bgRefreshItems().then(() => { syncBgControls(); bgApply(); renderBgThumbs(); });
 
 // ---------- SAFE APP UPDATE ----------
 // Clears the app's cached copy and the service worker, then reloads, so the
