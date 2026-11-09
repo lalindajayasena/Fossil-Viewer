@@ -127,7 +127,7 @@
     color: var(--text-secondary);
   }
   #centerUploadMsg.error { color: #c0392b; }
-  #updateAppBtn {
+  #updateAppBtn, #welcomePicsBtn {
     margin-top: 14px;
     background: transparent;
     border: 1px solid var(--icon-border);
@@ -138,7 +138,7 @@
     font-family: inherit;
     cursor: pointer;
   }
-  #updateAppBtn:active { background: var(--icon-pressed-bg); }
+  #updateAppBtn:active, #welcomePicsBtn:active { background: var(--icon-pressed-bg); }
   #appVersionLabel {
     margin-top: 8px;
     font-size: 11px;
@@ -407,7 +407,8 @@
     transition: opacity 1.2s ease;
   }
   .bg-layer.visible { opacity: 1; }
-  #bgThumbs { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+  #bgThumbs, #bgSharedThumbs { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+  #bgScopeNote { font-size: 12.5px; color: var(--text-secondary); margin-bottom: 10px; line-height: 1.5; white-space: pre-line; }
   .bg-thumb {
     position: relative;
     width: 64px; height: 64px;
@@ -428,7 +429,7 @@
     padding: 0;
     cursor: pointer;
   }
-  #bgNote, #bgCountNote { font-size: 12px; color: var(--text-secondary); margin-top: 8px; line-height: 1.5; }
+  #bgNote, #bgCountNote, #bgSharedNote { font-size: 12px; color: var(--text-secondary); margin-top: 8px; line-height: 1.5; }
   #toast {
     position: fixed;
     top: 14px;
@@ -747,8 +748,9 @@
   </div>
   <div id="centerUploadHint">Supports STL, OBJ, PLY, GLB</div>
   <div id="centerUploadMsg"></div>
+  <button type="button" id="welcomePicsBtn">🖼 Upload-screen pictures</button>
   <button type="button" id="updateAppBtn">⟳ Check for app update</button>
-  <div id="appVersionLabel">Version v48</div>
+  <div id="appVersionLabel">Version v49</div>
 </div>
 
 <div id="topbar">
@@ -881,9 +883,10 @@
     <button type="button" class="btn">🖼 Add pictures</button>
     <input type="file" class="upload-input-overlay" id="bgFileInput" accept="image/*" multiple>
   </div>
+  <div id="bgScopeNote"></div>
   <div id="bgCountNote"></div>
   <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--icon-text); margin-top:10px;">
-    <input type="checkbox" id="bgEnabled"> Show pictures behind the model
+    <input type="checkbox" id="bgEnabled"> Show background pictures
   </label>
   <div class="slider-row">
     <span class="slider-label">Change every</span>
@@ -900,6 +903,10 @@
     <input type="range" id="bgDim" min="0" max="70" value="20">
   </div>
   <div id="bgThumbs"></div>
+  <div id="bgSharedBox" style="display:none; margin-top:14px; border-top:1px solid var(--icon-bg); padding-top:10px;">
+    <div id="bgSharedNote">Shared pictures (added before pictures were kept per model). They show for any model that has none of its own:</div>
+    <div id="bgSharedThumbs"></div>
+  </div>
   <button type="button" class="btn" id="bgClearBtn" style="margin-top:12px;">Remove all pictures</button>
   <div id="bgNote"></div>
 </div>
@@ -977,7 +984,7 @@ import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 const container = document.getElementById('canvas-container');
-const APP_VERSION = 'v48';
+const APP_VERSION = 'v49';
 // True while background pictures are showing; the 3D scene then becomes see-through.
 let bgSlideshowActive = false;
 const statusEl = document.getElementById('status');
@@ -1627,6 +1634,7 @@ function addMeshToScene(mesh) {
   document.getElementById('toolRow').style.display = 'flex';
   document.getElementById('centerUpload').classList.add('hidden');
   ldjPickerMark('done');
+  if (typeof bgOnModelChanged === 'function') bgOnModelChanged();
   document.getElementById('topbar').classList.add('model-loaded');
   document.getElementById('floatingUploadWrap').classList.add('visible');
   updateProperties(mesh, currentFileName, currentFileSize);
@@ -2855,12 +2863,17 @@ wirePressAnimation(fileInputTopbar);
 wirePressAnimation(fileInputFloating);
 
 // ---------- BACKGROUND PICTURE SLIDESHOW ----------
+// Every saved picture belongs to one "scope":
+//   'welcome'            -> the upload screen
+//   'model:<file name>'  -> one specific model (matched by file name, like descriptions)
+//   'shared'             -> pictures saved before scopes existed; they show for any
+//                           model that has no pictures of its own
 // Pictures are shrunk when added (a 50 MP gallery photo would need ~200 MB to
 // decode, which can crash a low-memory phone) and stored in their own small
 // database, separate from the saved descriptions.
 const BG_DB_NAME = 'ldjBackgroundsDB';
 const BG_STORE = 'images';
-const BG_MAX_IMAGES = 12;
+const BG_MAX_IMAGES = 12;     // per scope
 const BG_MAX_SIDE = 1800;
 const BG_SETTINGS_KEY = 'ldjBgSettings';
 const bgSlideshowEl = document.getElementById('bgSlideshow');
@@ -2900,17 +2913,37 @@ function bgDbWrite(fn) {
   }));
 }
 
-let bgItems = [];          // { id, name, url }
+let bgRows = [];                 // every saved picture: { id, scope, name, blob }
+const bgUrlCache = new Map();    // picture id -> object URL, created only when needed
+function bgUrl(row) {
+  let u = bgUrlCache.get(row.id);
+  if (!u) { u = URL.createObjectURL(row.blob); bgUrlCache.set(row.id, u); }
+  return u;
+}
+function bgLoadRows() {
+  return bgDbGetAll().then((rows) => {
+    // Pictures saved before scopes existed have no scope: treat them as shared.
+    bgRows = rows.map((r) => ({ id: r.id, scope: r.scope || 'shared', name: r.name, blob: r.blob }));
+    const live = new Set(bgRows.map((r) => r.id));
+    Array.from(bgUrlCache.keys()).forEach((id) => {
+      if (!live.has(id)) { URL.revokeObjectURL(bgUrlCache.get(id)); bgUrlCache.delete(id); }
+    });
+  });
+}
+function bgModelScope() { return 'model:' + currentFileName; }
+function bgRowsIn(scope) { return bgRows.filter((r) => r.scope === scope); }
+function bgActiveRows() {
+  if (!currentModel) return bgRowsIn('welcome');
+  const own = bgRowsIn(bgModelScope());
+  return own.length ? own : bgRowsIn('shared');
+}
+
+let bgItems = [];          // the pictures currently in the slideshow: { id, name, url }
+let bgSignature = '';
 let bgIndex = 0;
 let bgFrontIsA = false;
 let bgTimer = null;
-
-function bgRefreshItems() {
-  return bgDbGetAll().then((rows) => {
-    bgItems.forEach((i) => URL.revokeObjectURL(i.url));
-    bgItems = rows.map((r) => ({ id: r.id, name: r.name, url: URL.createObjectURL(r.blob) }));
-  });
-}
+let bgPanelScope = 'welcome';   // what the panel is editing: 'welcome' or 'model'
 
 function bgShowIndex(i) {
   if (!bgItems.length) return;
@@ -2930,6 +2963,10 @@ function bgStartTimer() {
   }
 }
 function bgApply() {
+  const rows = bgActiveRows();
+  bgItems = rows.map((r) => ({ id: r.id, name: r.name, url: bgUrl(r) }));
+  const signature = rows.map((r) => r.id).join(',');
+  if (signature !== bgSignature) { bgSignature = signature; bgIndex = 0; }   // different set: start from the first picture
   const active = bgSettings.enabled && bgItems.length > 0;
   bgSlideshowActive = active;
   bgSlideshowEl.classList.toggle('active', active);
@@ -2946,6 +2983,14 @@ function bgApply() {
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') bgStartTimer(); else bgStopTimer();
 });
+
+// Called when a model finishes loading: switch from the upload-screen pictures
+// to that model's own pictures.
+function bgOnModelChanged() {
+  bgPanelScope = currentModel ? 'model' : 'welcome';
+  bgApply();
+  renderBgPanel();
+}
 
 // Shrink a gallery photo before storing it.
 async function bgPrepareImage(file) {
@@ -2978,29 +3023,58 @@ async function bgPrepareImage(file) {
   return blob;
 }
 
-function renderBgThumbs() {
-  const box = document.getElementById('bgThumbs');
+// ----- panel -----
+function bgPanelScopeKey() { return bgPanelScope === 'welcome' ? 'welcome' : bgModelScope(); }
+
+function bgFillThumbs(box, rows) {
   box.innerHTML = '';
-  bgItems.forEach((item) => {
+  rows.forEach((row) => {
     const d = document.createElement('div');
     d.className = 'bg-thumb';
-    d.style.backgroundImage = 'url("' + item.url + '")';
+    d.style.backgroundImage = 'url("' + bgUrl(row) + '")';
     const b = document.createElement('button');
     b.type = 'button';
     b.textContent = '✕';
     b.title = 'Remove this picture';
     b.addEventListener('click', async () => {
-      await bgDbWrite((store) => store.delete(item.id));
-      await bgRefreshItems();
+      await bgDbWrite((store) => store.delete(row.id));
+      await bgLoadRows();
       bgApply();
-      renderBgThumbs();
+      renderBgPanel();
     });
     d.appendChild(b);
     box.appendChild(d);
   });
+}
+
+function renderBgPanel() {
+  const isWelcome = bgPanelScope === 'welcome';
+  const own = bgRowsIn(bgPanelScopeKey());
+  const shared = bgRowsIn('shared');
+
+  let note;
+  if (isWelcome) {
+    note = 'These pictures show behind the upload screen.';
+  } else {
+    note = 'Pictures for this model:\n' + (currentFileName || '');
+    if (!own.length && shared.length) note += '\nIt has none of its own yet, so the shared pictures below are showing.';
+  }
+  document.getElementById('bgScopeNote').textContent = note;
   document.getElementById('bgCountNote').textContent =
-    bgItems.length + ' of ' + BG_MAX_IMAGES + ' pictures saved';
-  document.getElementById('bgClearBtn').style.display = bgItems.length ? 'inline-flex' : 'none';
+    own.length + ' of ' + BG_MAX_IMAGES + ' pictures saved for ' + (isWelcome ? 'the upload screen' : 'this model');
+  bgFillThumbs(document.getElementById('bgThumbs'), own);
+
+  const clearBtn = document.getElementById('bgClearBtn');
+  clearBtn.textContent = isWelcome ? 'Remove all upload-screen pictures' : 'Remove all pictures of this model';
+  clearBtn.style.display = own.length ? 'inline-flex' : 'none';
+
+  const sharedBox = document.getElementById('bgSharedBox');
+  if (!isWelcome && shared.length) {
+    sharedBox.style.display = 'block';
+    bgFillThumbs(document.getElementById('bgSharedThumbs'), shared);
+  } else {
+    sharedBox.style.display = 'none';
+  }
 }
 
 function syncBgControls() {
@@ -3013,9 +3087,14 @@ async function bgHandleFiles(files) {
   const note = document.getElementById('bgNote');
   const list = Array.from(files);
   if (!list.length) return;
-  const room = BG_MAX_IMAGES - bgItems.length;
+  if (bgPanelScope === 'model' && !currentFileName) {
+    note.textContent = 'Load a model first.';
+    return;
+  }
+  const scopeKey = bgPanelScopeKey();
+  const room = BG_MAX_IMAGES - bgRowsIn(scopeKey).length;
   if (room <= 0) {
-    note.textContent = 'You already have ' + BG_MAX_IMAGES + ' pictures. Remove one first.';
+    note.textContent = 'This already has ' + BG_MAX_IMAGES + ' pictures. Remove one first.';
     return;
   }
   const todo = list.slice(0, room);
@@ -3024,18 +3103,27 @@ async function bgHandleFiles(files) {
     note.textContent = 'Adding picture ' + (i + 1) + ' of ' + todo.length + '…';
     try {
       const blob = await bgPrepareImage(todo[i]);
-      if (await bgDbWrite((store) => store.add({ blob, name: todo[i].name, addedAt: Date.now() }))) added++; else failed++;
+      if (await bgDbWrite((store) => store.add({ blob, name: todo[i].name, scope: scopeKey, addedAt: Date.now() }))) added++; else failed++;
     } catch (e) { failed++; }
   }
-  await bgRefreshItems();
+  await bgLoadRows();
   if (added > 0) { bgSettings.enabled = true; saveBgSettings(); }
   syncBgControls();
   bgApply();
-  renderBgThumbs();
+  renderBgPanel();
   let msg = added ? 'Added ' + added + ' picture' + (added === 1 ? '' : 's') + '.' : 'No pictures were added.';
   if (failed) msg += ' ' + failed + ' could not be read (some formats, such as HEIC, are not supported).';
   if (list.length > todo.length) msg += ' Only the first ' + todo.length + ' fit within the limit of ' + BG_MAX_IMAGES + '.';
   note.textContent = msg;
+}
+
+function openBgPanel(scope) {
+  bgPanelScope = scope;
+  closeAllPanels();
+  panels.bgPanel.classList.add('open');
+  document.getElementById('bgBtn').classList.add('active');
+  document.getElementById('bgNote').textContent = '';
+  renderBgPanel();
 }
 
 const bgFileInput = document.getElementById('bgFileInput');
@@ -3059,16 +3147,25 @@ document.getElementById('bgDim').addEventListener('input', (e) => {
 });
 document.getElementById('bgDim').addEventListener('change', saveBgSettings);
 document.getElementById('bgClearBtn').addEventListener('click', async () => {
-  await bgDbWrite((store) => store.clear());
-  await bgRefreshItems();
+  const key = bgPanelScopeKey();
+  const ids = bgRowsIn(key).map((r) => r.id);
+  await bgDbWrite((store) => ids.forEach((id) => store.delete(id)));
+  await bgLoadRows();
   bgApply();
-  renderBgThumbs();
-  document.getElementById('bgNote').textContent = 'All pictures removed.';
+  renderBgPanel();
+  document.getElementById('bgNote').textContent = 'Pictures removed.';
 });
-document.getElementById('bgBtn').addEventListener('click', () => togglePanel('bgPanel', 'bgBtn'));
+
+// Toolbar 🖼 button: edit the pictures of the model on screen.
+document.getElementById('bgBtn').addEventListener('click', () => {
+  if (panels.bgPanel.classList.contains('open')) closeAllPanels();
+  else openBgPanel(currentModel ? 'model' : 'welcome');
+});
+// Welcome-screen button: edit the upload-screen pictures.
+document.getElementById('welcomePicsBtn').addEventListener('click', () => openBgPanel('welcome'));
 
 // Restore saved pictures on every start.
-bgRefreshItems().then(() => { syncBgControls(); bgApply(); renderBgThumbs(); });
+bgLoadRows().then(() => { syncBgControls(); bgApply(); renderBgPanel(); });
 
 // ---------- SAFE APP UPDATE ----------
 // Clears the app's cached copy and the service worker, then reloads, so the
