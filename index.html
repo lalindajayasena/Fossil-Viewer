@@ -406,7 +406,34 @@
     opacity: 0;
     transition: opacity 1.2s ease;
   }
+  .bg-layer { will-change: opacity; }   /* keeps the fade on the graphics chip, no repainting */
   .bg-layer.visible { opacity: 1; }
+  /* Transparent pause / resume button for the background slideshow. White with a
+     soft dark outline so it stays visible on any picture. */
+  #bgPauseBtn {
+    position: fixed;
+    left: 14px;
+    bottom: 100px;
+    z-index: 40;
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: #fff;
+    font-size: 15px;
+    line-height: 1;
+    opacity: 0.5;
+    text-shadow: 0 0 4px rgba(0,0,0,0.75), 0 0 2px rgba(0,0,0,0.75);
+    cursor: pointer;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #bgPauseBtn.visible { display: flex; }
+  #bgPauseBtn:active { opacity: 0.95; background: rgba(128,128,128,0.25); }
   #bgThumbs, #bgSharedThumbs { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
   #bgScopeNote { font-size: 12.5px; color: var(--text-secondary); margin-bottom: 10px; line-height: 1.5; white-space: pre-line; }
   .bg-thumb {
@@ -750,7 +777,7 @@
   <div id="centerUploadMsg"></div>
   <button type="button" id="welcomePicsBtn">🖼 Upload-screen pictures</button>
   <button type="button" id="updateAppBtn">⟳ Check for app update</button>
-  <div id="appVersionLabel">Version v49</div>
+  <div id="appVersionLabel">Version v50</div>
 </div>
 
 <div id="topbar">
@@ -952,6 +979,7 @@
 
 <!-- Standalone button, separate from the icon toolbar, for reading the saved description -->
 <button id="readDescBtn" title="Read Description">📖</button>
+<button type="button" id="bgPauseBtn" title="Pause background pictures">❚❚</button>
 <div class="upload-btn-wrap" id="floatingUploadWrap">
   <button type="button" class="btn" id="floatingUploadBtn" title="Upload a different 3D object">📤<span class="upload-btn-label"> Upload</span></button>
   <input type="file" class="upload-input-overlay" id="fileInputFloating" accept=".stl,.obj,.ply,.glb,.gltf">
@@ -984,9 +1012,13 @@ import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 const container = document.getElementById('canvas-container');
-const APP_VERSION = 'v49';
+const APP_VERSION = 'v50';
 // True while background pictures are showing; the 3D scene then becomes see-through.
 let bgSlideshowActive = false;
+// Rendering bookkeeping, declared up here because early setup code touches it.
+let lastActivityAt = performance.now();   // last touch / tap / change, used for on-demand rendering
+let shadowDirty = true;                   // the shadow map needs recomputing
+function markActive() { lastActivityAt = performance.now(); }
 const statusEl = document.getElementById('status');
 const loadingEl = document.getElementById('loading');
 
@@ -1031,6 +1063,7 @@ function updateSceneBackground() {
   } else {
     scene.background = new THREE.Color(currentTheme === 'dark' ? 0x1c1b19 : 0xf2efe9);
   }
+  markActive();
 }
 
 function applyTheme(theme) {
@@ -1058,6 +1091,12 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+// Shadows are recomputed only when the model actually moves (see
+// syncShadowWithModel), not every frame. Redrawing them 60 times a second
+// for a multi-million-triangle model was the single most expensive thing
+// the app did.
+renderer.shadowMap.autoUpdate = false;
+renderer.shadowMap.needsUpdate = true;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 0.9;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -1067,14 +1106,44 @@ container.appendChild(renderer.domElement);
 // which can differ from the visible area on phones with browser bars or
 // when fullscreen is toggled). CSS makes the canvas fill the box; this only
 // sets the drawing resolution.
+let lastFitW = 0;
+let lastFitH = 0;
 function fitRenderer() {
   const w = Math.max(container.clientWidth, 1);
   const h = Math.max(container.clientHeight, 1);
+  // Several browser events report a resize; re-creating the drawing buffer
+  // each time, even when the size is unchanged, causes needless hitches.
+  if (w === lastFitW && h === lastFitH) return;
+  lastFitW = w;
+  lastFitH = h;
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
   renderer.setSize(w, h, false);
+  markActive();
 }
 fitRenderer();
+
+// Very heavy models get a slightly lower drawing resolution; the fill-rate
+// saving matters more than the small loss of sharpness on a phone screen.
+const HEAVY_MODEL_TRIANGLES = 800000;
+function setRenderQuality(heavy) {
+  const target = heavy ? 1.25 : Math.min(window.devicePixelRatio, 2);
+  if (renderer.getPixelRatio() !== target) {
+    renderer.setPixelRatio(target);
+    lastFitW = 0;          // force the buffer to be rebuilt at the new ratio
+    fitRenderer();
+  }
+}
+function countTriangles(object) {
+  let n = 0;
+  object.traverse((c) => {
+    if (c.isMesh && c.geometry && c.geometry.attributes.position) {
+      const g = c.geometry;
+      n += g.index ? g.index.count / 3 : g.attributes.position.count / 3;
+    }
+  });
+  return n;
+}
 
 // Lights
 scene.add(new THREE.AmbientLight(0xffffff, 0.45));
@@ -1141,7 +1210,6 @@ controls.enableRotate = false;
 let isDragging = false;
 let lastDragX = 0;
 let lastDragY = 0;
-let shadowResumeTimer = null;
 const ROTATE_SENSITIVITY = 0.01;
 
 // Single direction flag — flip with the toolbar button if rotation ever
@@ -1162,6 +1230,21 @@ function toggleRotationDirection() {
 function toggleVerticalRotateDirection() { toggleRotationDirection(); }
 function toggleHorizontalRotateDirection() { /* no-op, kept for compatibility */ }
 
+// Reused on every call instead of allocating new objects for each touch event.
+const _Y_AXIS = new THREE.Vector3(0, 1, 0);
+const _yawQ = new THREE.Quaternion();
+const _pitchQ = new THREE.Quaternion();
+const _camRight = new THREE.Vector3();
+const _dragBox = new THREE.Box3();
+const _dragCenter = new THREE.Vector3();
+
+// Finger movement is collected here and applied once per drawn frame, so a
+// phone that reports 120 touch events a second does the rotation maths once
+// per frame instead of 120 times.
+let pendingDragDX = 0;
+let pendingDragDY = 0;
+let lastDragMoveAt = 0;
+
 function handleDragRotate(dx, dy) {
   if (!currentModel) return;
 
@@ -1170,39 +1253,26 @@ function handleDragRotate(dx, dy) {
   // Dragging the model directly: your finger moving right should pull the
   // near side of the model to the right (spinning it to match your hand),
   // and your finger moving up should pull the near side up and over.
-  // Written explicitly with no hidden sign confusion — `sign` is the ONLY
-  // multiplier that changes direction, controlled by the ⇄ toolbar button.
+  // `sign` is the ONLY multiplier that changes direction, controlled by the
+  // ⇄ toolbar button.
   const yawAngle = dx * ROTATE_SENSITIVITY * sign;
   const pitchAngle = dy * ROTATE_SENSITIVITY * sign;
 
-  const yawQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yawAngle);
-
-  const camRight = new THREE.Vector3();
-  camera.getWorldDirection(new THREE.Vector3()); // ensure matrix is current
-  camRight.setFromMatrixColumn(camera.matrixWorld, 0).normalize();
-  const pitchQuat = new THREE.Quaternion().setFromAxisAngle(camRight, pitchAngle);
+  _yawQ.setFromAxisAngle(_Y_AXIS, yawAngle);
+  camera.updateMatrixWorld();
+  _camRight.setFromMatrixColumn(camera.matrixWorld, 0).normalize();
+  _pitchQ.setFromAxisAngle(_camRight, pitchAngle);
 
   // Rotate around the model's own visual center, not its local origin,
   // so it spins in place rather than swinging around a corner.
-  const box = new THREE.Box3().setFromObject(currentModel);
-  const center = box.getCenter(new THREE.Vector3());
+  _dragBox.setFromObject(currentModel);
+  _dragBox.getCenter(_dragCenter);
 
-  currentModel.position.sub(center);
-  currentModel.position.applyQuaternion(yawQuat).applyQuaternion(pitchQuat);
-  currentModel.position.add(center);
+  currentModel.position.sub(_dragCenter);
+  currentModel.position.applyQuaternion(_yawQ).applyQuaternion(_pitchQ);
+  currentModel.position.add(_dragCenter);
 
-  currentModel.quaternion.premultiply(yawQuat).premultiply(pitchQuat);
-
-  // Temporarily disable expensive shadow recalculation while actively
-  // dragging large meshes — this is the single biggest per-frame cost,
-  // and pausing it during motion meaningfully reduces lag on lower-end
-  // phones. Shadows re-enable a moment after you stop moving.
-  renderer.shadowMap.autoUpdate = false;
-  clearTimeout(shadowResumeTimer);
-  shadowResumeTimer = setTimeout(() => {
-    renderer.shadowMap.autoUpdate = true;
-    renderer.shadowMap.needsUpdate = true;
-  }, 150);
+  currentModel.quaternion.premultiply(_yawQ).premultiply(_pitchQ);
 }
 
 let activePointerCount = 0;
@@ -1223,7 +1293,9 @@ renderer.domElement.addEventListener('pointermove', (e) => {
   const dy = e.clientY - lastDragY;
   lastDragX = e.clientX;
   lastDragY = e.clientY;
-  handleDragRotate(dx, dy);
+  pendingDragDX += dx;
+  pendingDragDY += dy;
+  lastDragMoveAt = performance.now();
 });
 
 window.addEventListener('pointerup', () => {
@@ -1528,15 +1600,24 @@ readDescBtn.addEventListener('click', (e) => {
 
 document.getElementById('descReaderClose').addEventListener('click', () => {
   descReaderOverlay.classList.remove('open');
-  renderer.shadowMap.autoUpdate = false;
   renderingPaused = false;
-  setTimeout(() => {
-    renderer.shadowMap.autoUpdate = true;
-    renderer.shadowMap.needsUpdate = true;
-  }, 100);
+  shadowDirty = true;
+  markActive();
 });
 let currentFileName = '';
 let currentFileSize = 0;
+
+// Frees a material AND the textures it uses. Disposing only the material left
+// every texture of a loaded .glb in graphics memory, so memory kept growing
+// each time another model was opened.
+function disposeMaterial(m) {
+  if (!m) return;
+  Object.keys(m).forEach((key) => {
+    const v = m[key];
+    if (v && v.isTexture) v.dispose();
+  });
+  m.dispose();
+}
 
 function clearCurrentModel() {
   if (currentModel) {
@@ -1544,14 +1625,12 @@ function clearCurrentModel() {
     currentModel.traverse((child) => {
       if (child.geometry) child.geometry.dispose();
       if (child.material) {
-        if (Array.isArray(child.material)) {
-          child.material.forEach(m => m.dispose());
-        } else {
-          child.material.dispose();
-        }
+        if (Array.isArray(child.material)) child.material.forEach(disposeMaterial);
+        else disposeMaterial(child.material);
       }
     });
     currentModel = null;
+    renderer.renderLists.dispose();
   }
 }
 
@@ -1631,6 +1710,9 @@ function addMeshToScene(mesh) {
   });
   scene.add(mesh);
   frameModel(mesh);
+  setRenderQuality(countTriangles(mesh) > HEAVY_MODEL_TRIANGLES);
+  shadowDirty = true;
+  markActive();
   document.getElementById('toolRow').style.display = 'flex';
   document.getElementById('centerUpload').classList.add('hidden');
   ldjPickerMark('done');
@@ -1640,15 +1722,26 @@ function addMeshToScene(mesh) {
   updateProperties(mesh, currentFileName, currentFileSize);
 
   const printStatusEl = document.getElementById('printStatus');
-  const printResult = checkPrintability(mesh);
-  printStatusEl.textContent = printResult.label;
-  printStatusEl.className = printResult.status === 'printable' ? 'printable'
-    : printResult.status === 'not-printable' ? 'not-printable' : '';
+  // Reset first: leftover inline colours from an earlier model used to
+  // override the green/red styling of the next one.
+  printStatusEl.className = '';
+  printStatusEl.style.background = '';
+  printStatusEl.style.color = '';
+  printStatusEl.textContent = 'Checking whether this model is 3D-printable…';
   printStatusEl.style.display = 'block';
-  if (printResult.status === 'unknown') {
-    printStatusEl.style.background = '#f0ece3';
-    printStatusEl.style.color = '#6b6a67';
-  }
+  // Run the check just after the model is on screen, so a big mesh doesn't
+  // hold up the first picture.
+  setTimeout(() => {
+    if (currentModel !== mesh) return;   // another model was loaded meanwhile
+    const printResult = checkPrintability(mesh);
+    printStatusEl.textContent = printResult.label;
+    printStatusEl.className = printResult.status === 'printable' ? 'printable'
+      : printResult.status === 'not-printable' ? 'not-printable' : '';
+    if (printResult.status === 'unknown') {
+      printStatusEl.style.background = '#f0ece3';
+      printStatusEl.style.color = '#6b6a67';
+    }
+  }, 80);
 
   if (typeof viewCycleBtn !== 'undefined') {
     currentViewIndex = -1;
@@ -2056,6 +2149,31 @@ document.getElementById('customColorPicker').addEventListener('input', (e) => {
 // Checks if a mesh is "watertight" (closed, no holes) — a rough proxy for 3D-printability.
 // Every edge in a fully closed mesh should be shared by exactly 2 triangles.
 // This is a heuristic check, not a full manifold/print-readiness validator.
+// Counts edges that are NOT shared by exactly two triangles. Each edge becomes
+// one number, the numbers are sorted, and runs of equal numbers are counted.
+// The old version built a text key per edge in a Map, which for a 250,000
+// triangle model meant ~750,000 strings and a multi-second freeze.
+function countOpenEdges(indexArray, vertexCount) {
+  const keys = new Float64Array(indexArray.length);
+  let k = 0;
+  for (let i = 0; i < indexArray.length; i += 3) {
+    const a = indexArray[i], b = indexArray[i + 1], c = indexArray[i + 2];
+    keys[k++] = a < b ? a * vertexCount + b : b * vertexCount + a;
+    keys[k++] = b < c ? b * vertexCount + c : c * vertexCount + b;
+    keys[k++] = c < a ? c * vertexCount + a : a * vertexCount + c;
+  }
+  keys.sort();
+  let open = 0;
+  let i = 0;
+  while (i < keys.length) {
+    let j = i + 1;
+    while (j < keys.length && keys[j] === keys[i]) j++;
+    if (j - i !== 2) open++;
+    i = j;
+  }
+  return open;
+}
+
 function checkPrintability(object) {
   let totalTris = 0;
   let hasNonIndexed = false;
@@ -2079,24 +2197,7 @@ function checkPrintability(object) {
 
     if (triCount > 300000) return; // skip edge-check for huge meshes, too slow on mobile
 
-    const edgeMap = new Map();
-    const idx = geo.index.array;
-
-    function edgeKey(a, b) {
-      return a < b ? a + '_' + b : b + '_' + a;
-    }
-
-    for (let i = 0; i < idx.length; i += 3) {
-      const a = idx[i], b = idx[i + 1], c = idx[i + 2];
-      [[a, b], [b, c], [c, a]].forEach(([x, y]) => {
-        const key = edgeKey(x, y);
-        edgeMap.set(key, (edgeMap.get(key) || 0) + 1);
-      });
-    }
-
-    edgeMap.forEach((count) => {
-      if (count !== 2) openEdges++;
-    });
+    openEdges += countOpenEdges(geo.index.array, pos.count);
   });
 
   if (totalTris > 300000) {
@@ -2664,6 +2765,13 @@ function loadFile(file) {
   const reader = new FileReader();
   currentFileName = file.name;
   currentFileSize = file.size;
+  if (file.size > 40 * 1024 * 1024 && currentModel) {
+    // Reading a big file while the previous model is still in memory is the
+    // most likely moment for a low-memory phone to restart the page. Release
+    // the old model first so the two are never held at the same time.
+    clearCurrentModel();
+    if (typeof clearMeasurement === 'function') clearMeasurement();
+  }
 
   const instructionsEl = document.getElementById('loadingInstructions');
   const hasSeenInstructions = localStorage.getItem('ldjHasSeenInstructions');
@@ -2915,6 +3023,7 @@ function bgDbWrite(fn) {
 
 let bgRows = [];                 // every saved picture: { id, scope, name, blob }
 const bgUrlCache = new Map();    // picture id -> object URL, created only when needed
+const bgThumbCache = new Map();  // picture id -> small preview URL
 function bgUrl(row) {
   let u = bgUrlCache.get(row.id);
   if (!u) { u = URL.createObjectURL(row.blob); bgUrlCache.set(row.id, u); }
@@ -2927,6 +3036,9 @@ function bgLoadRows() {
     const live = new Set(bgRows.map((r) => r.id));
     Array.from(bgUrlCache.keys()).forEach((id) => {
       if (!live.has(id)) { URL.revokeObjectURL(bgUrlCache.get(id)); bgUrlCache.delete(id); }
+    });
+    Array.from(bgThumbCache.keys()).forEach((id) => {
+      if (!live.has(id)) { URL.revokeObjectURL(bgThumbCache.get(id)); bgThumbCache.delete(id); }
     });
   });
 }
@@ -2944,29 +3056,50 @@ let bgIndex = 0;
 let bgFrontIsA = false;
 let bgTimer = null;
 let bgPanelScope = 'welcome';   // what the panel is editing: 'welcome' or 'model'
+let bgPaused = false;           // slideshow paused by the user (this session only)
+let bgSwapToken = 0;            // lets a newer picture change cancel an older, still-decoding one
 
 function bgShowIndex(i) {
   if (!bgItems.length) return;
   bgIndex = ((i % bgItems.length) + bgItems.length) % bgItems.length;
-  const incoming = bgFrontIsA ? bgLayerB : bgLayerA;
-  const outgoing = bgFrontIsA ? bgLayerA : bgLayerB;
-  incoming.style.backgroundImage = 'url("' + bgItems[bgIndex].url + '")';
-  incoming.classList.add('visible');
-  outgoing.classList.remove('visible');
-  bgFrontIsA = !bgFrontIsA;
+  const url = bgItems[bgIndex].url;
+  const token = ++bgSwapToken;
+  const swap = () => {
+    if (token !== bgSwapToken) return;     // a newer change took over
+    const incoming = bgFrontIsA ? bgLayerB : bgLayerA;
+    const outgoing = bgFrontIsA ? bgLayerA : bgLayerB;
+    incoming.style.backgroundImage = 'url("' + url + '")';
+    incoming.classList.add('visible');
+    outgoing.classList.remove('visible');
+    bgFrontIsA = !bgFrontIsA;
+  };
+  // Decode the picture first so the swap itself never makes the page stall.
+  const img = new Image();
+  img.src = url;
+  if (img.decode) img.decode().then(swap, swap); else swap();
 }
 function bgStopTimer() { clearInterval(bgTimer); bgTimer = null; }
 function bgStartTimer() {
   bgStopTimer();
-  if (bgSettings.enabled && bgItems.length > 1 && document.visibilityState === 'visible') {
+  if (bgSettings.enabled && !bgPaused && bgItems.length > 1 && document.visibilityState === 'visible') {
     bgTimer = setInterval(() => bgShowIndex(bgIndex + 1), bgSettings.interval * 1000);
   }
 }
+function updateBgPauseBtn() {
+  const btn = document.getElementById('bgPauseBtn');
+  if (!btn) return;
+  btn.classList.toggle('visible', bgSlideshowActive && bgItems.length > 1);
+  btn.textContent = bgPaused ? '▶\uFE0E' : '❚❚';
+  btn.title = bgPaused ? 'Resume background pictures' : 'Pause background pictures';
+}
+
 function bgApply() {
   const rows = bgActiveRows();
   bgItems = rows.map((r) => ({ id: r.id, name: r.name, url: bgUrl(r) }));
   const signature = rows.map((r) => r.id).join(',');
-  if (signature !== bgSignature) { bgSignature = signature; bgIndex = 0; }   // different set: start from the first picture
+  const signatureChanged = signature !== bgSignature;
+  if (signatureChanged) { bgSignature = signature; bgIndex = 0; }   // different set: start from the first picture
+  const wasActive = bgSlideshowActive;
   const active = bgSettings.enabled && bgItems.length > 0;
   bgSlideshowActive = active;
   bgSlideshowEl.classList.toggle('active', active);
@@ -2974,11 +3107,11 @@ function bgApply() {
   updateSceneBackground();
   bgStopTimer();
   if (active) {
-    bgLayerA.classList.remove('visible');
-    bgLayerB.classList.remove('visible');
-    bgShowIndex(Math.min(bgIndex, bgItems.length - 1));
+    // Re-showing the same picture on every small change caused needless work.
+    if (signatureChanged || !wasActive) bgShowIndex(Math.min(bgIndex, bgItems.length - 1));
     bgStartTimer();
   }
+  updateBgPauseBtn();
 }
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') bgStartTimer(); else bgStopTimer();
@@ -3026,12 +3159,36 @@ async function bgPrepareImage(file) {
 // ----- panel -----
 function bgPanelScopeKey() { return bgPanelScope === 'welcome' ? 'welcome' : bgModelScope(); }
 
+// A tiny preview of a saved picture. The previews used to be the full
+// 1800 px pictures, so twelve small squares meant twelve full decodes in memory.
+async function bgMakeThumb(row) {
+  const cached = bgThumbCache.get(row.id);
+  if (cached) return cached;
+  try {
+    const bmp = await createImageBitmap(row.blob, { resizeWidth: 160, resizeQuality: 'low' });
+    const c = document.createElement('canvas');
+    c.width = bmp.width;
+    c.height = bmp.height;
+    c.getContext('2d').drawImage(bmp, 0, 0);
+    if (bmp.close) bmp.close();
+    const blob = await new Promise((res) => c.toBlob(res, 'image/jpeg', 0.7));
+    c.width = c.height = 1;
+    if (!blob) return bgUrl(row);
+    const url = URL.createObjectURL(blob);
+    bgThumbCache.set(row.id, url);
+    return url;
+  } catch (e) {
+    return bgUrl(row);    // fall back to the full picture
+  }
+}
+
 function bgFillThumbs(box, rows) {
   box.innerHTML = '';
-  rows.forEach((row) => {
+  const token = (box._thumbToken || 0) + 1;
+  box._thumbToken = token;
+  const tiles = rows.map((row) => {
     const d = document.createElement('div');
     d.className = 'bg-thumb';
-    d.style.backgroundImage = 'url("' + bgUrl(row) + '")';
     const b = document.createElement('button');
     b.type = 'button';
     b.textContent = '✕';
@@ -3044,10 +3201,21 @@ function bgFillThumbs(box, rows) {
     });
     d.appendChild(b);
     box.appendChild(d);
+    return d;
   });
+  // Build the previews one after another, not all at once.
+  (async () => {
+    for (let i = 0; i < rows.length; i++) {
+      const url = await bgMakeThumb(rows[i]);
+      if (box._thumbToken !== token) return;   // the panel was redrawn meanwhile
+      tiles[i].style.backgroundImage = 'url("' + url + '")';
+    }
+  })();
 }
 
 function renderBgPanel() {
+  // Nothing to draw (and no previews to decode) while the panel is closed.
+  if (!panels.bgPanel.classList.contains('open')) return;
   const isWelcome = bgPanelScope === 'welcome';
   const own = bgRowsIn(bgPanelScopeKey());
   const shared = bgRowsIn('shared');
@@ -3164,6 +3332,14 @@ document.getElementById('bgBtn').addEventListener('click', () => {
 // Welcome-screen button: edit the upload-screen pictures.
 document.getElementById('welcomePicsBtn').addEventListener('click', () => openBgPanel('welcome'));
 
+// Pause / resume the slideshow. Paused stays only for this session, so the
+// pictures never seem to be "stuck" the next time the app opens.
+document.getElementById('bgPauseBtn').addEventListener('click', () => {
+  bgPaused = !bgPaused;
+  if (bgPaused) bgStopTimer(); else bgStartTimer();
+  updateBgPauseBtn();
+});
+
 // Restore saved pictures on every start.
 bgLoadRows().then(() => { syncBgControls(); bgApply(); renderBgPanel(); });
 
@@ -3199,9 +3375,56 @@ if (window.ResizeObserver) new ResizeObserver(fitRenderer).observe(container);
 // Animation loop
 let renderingPaused = false;
 
-function animate() {
+// ---------- ON-DEMAND RENDERING ----------
+// Drawing the scene 60 times a second forever, even while nothing moves,
+// heats the phone and drains the battery. Now it draws at full speed only
+// for a moment after any touch, tap or change, then drops to one redraw a
+// second (a safety net for anything that finishes loading in the background,
+// such as model textures).
+const ACTIVE_WINDOW_MS = 1500;
+const IDLE_FRAME_MS = 1000;
+let lastIdleRenderAt = 0;
+['pointerdown', 'pointermove', 'pointerup', 'wheel', 'touchstart', 'touchmove', 'keydown', 'input', 'change', 'click']
+  .forEach((evt) => window.addEventListener(evt, markActive, { capture: true, passive: true }));
+
+// Shadows only need recomputing when the model has moved, and not while a
+// finger is still dragging it (they'd be out of date again on the next frame).
+const _lastPose = new Float64Array(8);
+let _lastPoseModel = null;
+function syncShadowWithModel(now) {
+  if (!currentModel) return;
+  const p = currentModel.position, q = currentModel.quaternion, s = currentModel.scale;
+  if (_lastPoseModel !== currentModel ||
+      _lastPose[0] !== p.x || _lastPose[1] !== p.y || _lastPose[2] !== p.z ||
+      _lastPose[3] !== q.x || _lastPose[4] !== q.y || _lastPose[5] !== q.z ||
+      _lastPose[6] !== q.w || _lastPose[7] !== s.x) {
+    _lastPoseModel = currentModel;
+    _lastPose[0] = p.x; _lastPose[1] = p.y; _lastPose[2] = p.z;
+    _lastPose[3] = q.x; _lastPose[4] = q.y; _lastPose[5] = q.z;
+    _lastPose[6] = q.w; _lastPose[7] = s.x;
+    shadowDirty = true;
+  }
+  if (shadowDirty && now - lastDragMoveAt > 180) {
+    renderer.shadowMap.needsUpdate = true;
+    shadowDirty = false;
+  }
+}
+
+function animate(now) {
   requestAnimationFrame(animate);
   if (renderingPaused) return;
+  now = now || performance.now();
+  if (now - lastActivityAt >= ACTIVE_WINDOW_MS) {
+    if (now - lastIdleRenderAt < IDLE_FRAME_MS) return;   // idle: skip this frame
+    lastIdleRenderAt = now;
+  }
+  // Apply all finger movement collected since the last frame in one step.
+  if (pendingDragDX !== 0 || pendingDragDY !== 0) {
+    handleDragRotate(pendingDragDX, pendingDragDY);
+    pendingDragDX = 0;
+    pendingDragDY = 0;
+  }
+  syncShadowWithModel(now);
   controls.update();
   if (typeof updateMeasureMarkerScale === 'function' && measureMarkers.length > 0) {
     updateMeasureMarkerScale();
