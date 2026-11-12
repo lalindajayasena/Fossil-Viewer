@@ -457,6 +457,34 @@
     cursor: pointer;
   }
   #bgNote, #bgCountNote, #bgSharedNote { font-size: 12px; color: var(--text-secondary); margin-top: 8px; line-height: 1.5; }
+  /* --- Ruler --- */
+  #rulerWrap { position: fixed; z-index: 22; display: none; pointer-events: none; }
+  #rulerWrap.visible { display: block; }
+  #rulerBox {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    pointer-events: auto;
+    touch-action: none;
+    cursor: grab;
+    background: rgba(255,255,255,0.10);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.55), 0 0 0 1px rgba(0,0,0,0.30);
+    border-radius: 4px;
+  }
+  #rulerCanvas { display: block; width: 100%; height: 100%; pointer-events: none; }
+  #rulerClose {
+    position: absolute; left: 100%; top: 50%;
+    margin-left: 6px; transform: translateY(-50%);
+    width: 26px; height: 26px; padding: 0;
+    border: none; border-radius: 50%;
+    background: rgba(0,0,0,0.35); color: #fff;
+    font-size: 12px; opacity: 0.75;
+    pointer-events: auto;
+  }
+  #rulerBtn svg { width: 20px; height: 20px; }
+  #rulerBtn.ruler-on { background: var(--icon-active-bg); color: var(--icon-active-text); border-color: var(--icon-active-bg); }
+  .ruler-section-title { font-size: 12.5px; font-weight: 700; color: var(--text-primary); margin-top: 16px; }
+  .ruler-help { font-size: 12px; color: var(--text-secondary); line-height: 1.5; margin-top: 4px; }
+  #rulerNote { font-size: 12.5px; color: var(--text-secondary); line-height: 1.5; white-space: pre-line; }
+  #rulerCalibBar { height: 14px; background: var(--accent); border-radius: 3px; margin-top: 8px; max-width: 100%; }
   #toast {
     position: fixed;
     top: 14px;
@@ -777,7 +805,7 @@
   <div id="centerUploadMsg"></div>
   <button type="button" id="welcomePicsBtn">🖼 Upload-screen pictures</button>
   <button type="button" id="updateAppBtn">⟳ Check for app update</button>
-  <div id="appVersionLabel">Version v50</div>
+  <div id="appVersionLabel">Version v51</div>
 </div>
 
 <div id="topbar">
@@ -805,6 +833,7 @@
     <button class="btn-icon" id="scaleBtn" title="Set real-world scale">📐</button>
     <button class="btn-icon" id="subtitleBtn" title="Play description as subtitles">💬</button>
     <button class="btn-icon" id="bgBtn" title="Background pictures">🖼</button>
+    <button class="btn-icon" id="rulerBtn" title="Ruler"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="8" width="20" height="8" rx="1.5"/><path d="M6 8v3M10 8v4.5M14 8v3M18 8v4.5"/></svg></button>
     <button class="btn-icon" id="invertRotateBtn" title="Flip rotation direction">⇄</button>
     <button class="btn-icon" id="themeToggleBtn" title="Toggle dark mode">🌙</button>
     <button class="btn-icon" id="fullscreenBtn" title="Full view">⛶</button>
@@ -938,6 +967,52 @@
   <div id="bgNote"></div>
 </div>
 
+<!-- Movable ruler: a transparent overlay, drawn in cm and mm -->
+<div id="rulerWrap">
+  <div id="rulerBox"><canvas id="rulerCanvas"></canvas></div>
+  <button type="button" id="rulerClose" title="Hide ruler">✕</button>
+</div>
+
+<!-- Ruler panel -->
+<div class="panel" id="rulerPanel">
+  <div class="panel-title">Ruler <button class="panel-close" data-close="rulerPanel">✕</button></div>
+  <div id="rulerNote"></div>
+
+  <div class="ruler-section-title">This model's real size</div>
+  <div class="slider-row">
+    <span class="slider-label">Longest side</span>
+    <input type="number" id="rulerRealInput" min="0" step="any" placeholder="e.g. 30" style="flex:1; min-width:0; padding:8px; border-radius:6px; border:1px solid var(--icon-border); background:var(--panel-bg); color:var(--text-primary);">
+    <select id="rulerRealUnit" style="padding:8px; border-radius:6px; border:1px solid var(--icon-border); background:var(--panel-bg); color:var(--text-primary);">
+      <option value="mm">mm</option>
+      <option value="cm" selected>cm</option>
+      <option value="m">m</option>
+      <option value="in">in</option>
+    </select>
+  </div>
+  <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
+    <button type="button" class="btn" id="rulerSaveSizeBtn">Save size</button>
+    <button type="button" class="btn" id="rulerLifeBtn">⤢ Life size</button>
+  </div>
+  <label style="display:flex; align-items:flex-start; gap:8px; font-size:13px; color:var(--icon-text); margin-top:12px; line-height:1.4;">
+    <input type="checkbox" id="rulerAuto" style="margin-top:3px;"> Resize the model to life size when I place the ruler on it
+  </label>
+
+  <div class="ruler-section-title">Ruler</div>
+  <div class="slider-row"><span class="slider-label">Length</span><input type="range" id="rulerLength" min="120" max="900" value="320"></div>
+  <div class="slider-row"><span class="slider-label">Angle</span><input type="range" id="rulerAngle" min="0" max="175" step="5" value="0"></div>
+  <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
+    <button type="button" class="btn" id="rulerHorizBtn">↔ Horizontal</button>
+    <button type="button" class="btn" id="rulerVertBtn">↕ Vertical</button>
+  </div>
+
+  <div class="ruler-section-title">Screen calibration</div>
+  <div class="ruler-help">Hold a real ruler against the screen and adjust until this bar is exactly 5 cm long. Life size depends on it.</div>
+  <div id="rulerCalibBar"></div>
+  <div class="slider-row"><span class="slider-label">Pixels per cm</span><input type="range" id="rulerCalib" min="40" max="75" step="0.5" value="63"></div>
+
+  <button type="button" class="btn" id="rulerHideBtn" style="margin-top:14px;">Hide ruler</button>
+</div>
+
 <div id="toast"></div>
 
 <div id="loading">
@@ -1012,7 +1087,7 @@ import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 const container = document.getElementById('canvas-container');
-const APP_VERSION = 'v50';
+const APP_VERSION = 'v51';
 // True while background pictures are showing; the 3D scene then becomes see-through.
 let bgSlideshowActive = false;
 // Rendering bookkeeping, declared up here because early setup code touches it.
@@ -1654,6 +1729,11 @@ function frameModel(object) {
   object.position.z -= center.z;
 
   const maxDim = Math.max(size.x, size.y, size.z, 0.0001);
+  // Longest side of the model in its own file units. Measured once, on the
+  // first framing, when the model still has scale 1; the ruler needs it to
+  // turn a real-world length into a scale.
+  const prevScale = object.scale.x || 1;
+  if (object.userData.fileMaxDim === undefined) object.userData.fileMaxDim = maxDim / prevScale;
   const targetSize = 2.5;
   const scale = targetSize / maxDim;
   object.scale.setScalar(scale);
@@ -1673,6 +1753,7 @@ function frameModel(object) {
   // large/small models don't hit an artificial "stuck" zoom boundary.
   controls.minDistance = Math.max(distance * 0.01, 0.001);
   controls.maxDistance = distance * 20;
+  object.userData.frameDistance = distance;
 
   camera.near = distance / 1000;
   camera.far = distance * 200;
@@ -1710,6 +1791,7 @@ function addMeshToScene(mesh) {
   });
   scene.add(mesh);
   frameModel(mesh);
+  if (typeof applySavedModelSize === 'function') applySavedModelSize(mesh);
   setRenderQuality(countTriangles(mesh) > HEAVY_MODEL_TRIANGLES);
   shadowDirty = true;
   markActive();
@@ -1717,6 +1799,7 @@ function addMeshToScene(mesh) {
   document.getElementById('centerUpload').classList.add('hidden');
   ldjPickerMark('done');
   if (typeof bgOnModelChanged === 'function') bgOnModelChanged();
+  if (typeof rulerOnModelChanged === 'function') rulerOnModelChanged();
   document.getElementById('topbar').classList.add('model-loaded');
   document.getElementById('floatingUploadWrap').classList.add('visible');
   updateProperties(mesh, currentFileName, currentFileSize);
@@ -2244,6 +2327,10 @@ function updateProperties(mesh, fileName, fileSize) {
     ['Width (X)', size.x.toFixed(3)],
     ['Height (Y)', size.y.toFixed(3)],
     ['Depth (Z)', size.z.toFixed(3)],
+    ['Real size (longest side)',
+      (mesh.userData.fileMaxDim && mesh.userData.realWorldMmPerFileUnit)
+        ? formatRealWorldDistance(mesh.userData.fileMaxDim * mesh.userData.realWorldMmPerFileUnit)
+        : 'not saved'],
     ['App version', APP_VERSION]
   ];
 
@@ -2262,7 +2349,8 @@ const panels = {
   descPanel: document.getElementById('descPanel'),
   customizePanel: document.getElementById('customizePanel'),
   scalePanel: document.getElementById('scalePanel'),
-  bgPanel: document.getElementById('bgPanel')
+  bgPanel: document.getElementById('bgPanel'),
+  rulerPanel: document.getElementById('rulerPanel')
 };
 
 function closeAllPanels() {
@@ -2275,6 +2363,7 @@ function closeAllPanels() {
   document.getElementById('customizeBtn').classList.remove('active');
   document.getElementById('scaleBtn').classList.remove('active');
   document.getElementById('bgBtn').classList.remove('active');
+  document.getElementById('rulerBtn').classList.remove('active');
   interactionMode = 'none';
 }
 
@@ -2316,7 +2405,8 @@ const BUTTON_LABELS = {
   invertRotateBtn: 'Flip Rotation Direction',
   themeToggleBtn: 'Dark / Light Mode',
   subtitleBtn: 'Play Description as Subtitles',
-  bgBtn: 'Background Pictures'
+  bgBtn: 'Background Pictures',
+  rulerBtn: 'Ruler'
 };
 
 function getCurrentToolbarOrder() {
@@ -2363,7 +2453,7 @@ function renderCustomizeList() {
     const icon = document.createElement('div');
     icon.className = 'reorder-icon';
     const btnEl = document.getElementById(id);
-    icon.textContent = btnEl ? btnEl.textContent : '';
+    icon.innerHTML = btnEl ? btnEl.innerHTML : '';   // innerHTML so the ruler's drawn icon shows too
 
     const name = document.createElement('div');
     name.className = 'reorder-name';
@@ -2440,6 +2530,8 @@ document.getElementById('applyScaleBtn').addEventListener('click', () => {
   const mmPerFileUnit = realMm / lastMeasuredFileUnitDist;
 
   currentModel.userData.realWorldMmPerFileUnit = mmPerFileUnit;
+  if (typeof ldjSaveModelSize === 'function') ldjSaveModelSize(currentFileName, mmPerFileUnit);
+  if (typeof rulerOnModelChanged === 'function') rulerOnModelChanged();
   statusEl.textContent = 'Scale applied ✓ — future measurements on this file will show real-world size.';
 });
 
@@ -3343,6 +3435,404 @@ document.getElementById('bgPauseBtn').addEventListener('click', () => {
 // Restore saved pictures on every start.
 bgLoadRows().then(() => { syncBgControls(); bgApply(); renderBgPanel(); });
 
+// ---------- RULER ----------
+// A transparent, movable ruler in cm and mm. Once a model's real size is saved,
+// the ruler follows the zoom and always reads true lengths (at the depth of the
+// point the camera is looking at). "Life size" zooms the model so that it is
+// shown at its real size on the screen, using the screen calibration.
+const RULER_H = 46;
+const RULER_SETTINGS_KEY = 'ldjRulerSettings';
+const MODEL_SIZES_KEY = 'ldjModelSizes';
+// Tick steps in tenths of a millimetre: 0.1 mm ... 10 m
+const RULER_NICE_TENTHS = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000];
+
+// Which tick spacing to draw at this zoom: small ticks at least 5 px apart,
+// numbered ticks at least 38 px apart (and a whole multiple of the small step).
+function rulerTickPlan(pxPerMm) {
+  const pxPerTenth = pxPerMm / 10;
+  const last = RULER_NICE_TENTHS[RULER_NICE_TENTHS.length - 1];
+  let minor = last;
+  for (const c of RULER_NICE_TENTHS) { if (c * pxPerTenth >= 5) { minor = c; break; } }
+  let label = last;
+  for (const c of RULER_NICE_TENTHS) {
+    if (c >= minor && c % minor === 0 && c * pxPerTenth >= 38) { label = c; break; }
+  }
+  if (label < minor) label = minor;
+  return { minor, label };
+}
+function rulerLabelInfo(labelTenths) {
+  if (labelTenths >= 10000) return { unit: 'm', div: 10000 };
+  if (labelTenths >= 100) return { unit: 'cm', div: 100 };
+  return { unit: 'mm', div: 10 };
+}
+function rulerNumText(v) { return String(Math.round(v * 1000) / 1000); }
+
+// Draws the ruler's ticks and numbers. White lines with a dark outline, so it
+// stays readable over any background while the body stays see-through.
+function rulerPaint(ctx, W, H, pxPerMm) {
+  ctx.clearRect(0, 0, W, H);
+  const plan = rulerTickPlan(pxPerMm);
+  const pxPerTenth = pxPerMm / 10;
+  const info = rulerLabelInfo(plan.label);
+  const count = Math.floor((W / pxPerTenth) / plan.minor);
+  const halfOk = plan.label % 2 === 0 && (plan.label / 2) % plan.minor === 0;
+  const ticks = [];
+  for (let k = 0; k <= count; k++) {
+    const t = k * plan.minor;
+    const x = Math.round(t * pxPerTenth) + 0.5;
+    let len = 9, isLabel = false;
+    if (t % plan.label === 0) { len = 22; isLabel = true; }
+    else if (halfOk && t % (plan.label / 2) === 0) len = 15;
+    ticks.push({ x, len, isLabel, t });
+  }
+  ctx.lineCap = 'butt';
+  [['rgba(0,0,0,0.55)', 3.2], ['rgba(255,255,255,0.95)', 1.3]].forEach(([style, width]) => {
+    ctx.strokeStyle = style;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    ticks.forEach((tk) => { ctx.moveTo(tk.x, 0); ctx.lineTo(tk.x, tk.len); });
+    ctx.stroke();
+  });
+  ctx.font = '600 11px -apple-system, Roboto, Arial, sans-serif';
+  ctx.textBaseline = 'alphabetic';
+  ctx.lineJoin = 'round';
+  ctx.textAlign = 'center';
+  ticks.forEach((tk) => {
+    if (!tk.isLabel) return;
+    const text = rulerNumText(tk.t / info.div);
+    const half = ctx.measureText(text).width / 2;
+    const x = Math.min(Math.max(tk.x, half + 2), W - half - 2);
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+    ctx.strokeText(text, x, 33);
+    ctx.fillStyle = '#fff';
+    ctx.fillText(text, x, 33);
+  });
+  ctx.textAlign = 'right';
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+  ctx.strokeText(info.unit, W - 5, H - 5);
+  ctx.fillStyle = '#fff';
+  ctx.fillText(info.unit, W - 5, H - 5);
+}
+
+// ----- remembered real sizes (per file name, like descriptions) -----
+function ldjLoadModelSizes() {
+  try { return JSON.parse(localStorage.getItem(MODEL_SIZES_KEY) || '{}') || {}; } catch (e) { return {}; }
+}
+function ldjSaveModelSize(name, mmPerFileUnit) {
+  if (!name) return;
+  const all = ldjLoadModelSizes();
+  all[name] = mmPerFileUnit;
+  try { localStorage.setItem(MODEL_SIZES_KEY, JSON.stringify(all)); } catch (e) { /* ignore */ }
+}
+function applySavedModelSize(mesh) {
+  const v = ldjLoadModelSizes()[currentFileName];
+  if (v > 0) mesh.userData.realWorldMmPerFileUnit = v;
+}
+
+// ----- ruler state and elements -----
+const rulerWrap = document.getElementById('rulerWrap');
+const rulerBox = document.getElementById('rulerBox');
+const rulerCanvas = document.getElementById('rulerCanvas');
+const ruler = { visible: false, cx: 0, cy: 0, angle: 0, length: 320, pxPerCm: 63, auto: true, drawnPxPerMm: 0, drawnW: 0, tooBig: false };
+try {
+  const s = JSON.parse(localStorage.getItem(RULER_SETTINGS_KEY) || '{}');
+  if (s.pxPerCm >= 40 && s.pxPerCm <= 75) ruler.pxPerCm = s.pxPerCm;
+  if (typeof s.auto === 'boolean') ruler.auto = s.auto;
+  if (s.length >= 120) ruler.length = s.length;
+  if (typeof s.angle === 'number') ruler.angle = s.angle;
+} catch (e) { /* defaults */ }
+function rulerSaveSettings() {
+  try {
+    localStorage.setItem(RULER_SETTINGS_KEY, JSON.stringify({
+      pxPerCm: ruler.pxPerCm, auto: ruler.auto, length: ruler.length, angle: ruler.angle
+    }));
+  } catch (e) { /* ignore */ }
+}
+
+// ----- scale maths -----
+function rulerModelInfo() {
+  if (!currentModel) return null;
+  const mmPerUnit = currentModel.userData.realWorldMmPerFileUnit;
+  const s = currentModel.scale.x;
+  const maxDim = currentModel.userData.fileMaxDim;
+  if (!mmPerUnit || !s || !maxDim) return null;
+  return { sceneUnitsPerMm: s / mmPerUnit, realMaxMm: maxDim * mmPerUnit };
+}
+// Screen pixels (CSS) per real millimetre of the model, at the depth of the
+// point the camera is looking at. Without a saved size the ruler is just a
+// plain screen ruler at the calibrated size.
+function rulerPxPerMmNow() {
+  const info = rulerModelInfo();
+  const plain = ruler.pxPerCm / 10;
+  if (!info) return plain;
+  const d = camera.position.distanceTo(controls.target);
+  const H = 2 * d * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+  if (!(H > 0)) return plain;
+  return (container.clientHeight / H) * info.sceneUnitsPerMm;
+}
+
+const _rulerDir = new THREE.Vector3();
+function rulerSetCameraDistance(d) {
+  _rulerDir.subVectors(camera.position, controls.target);
+  if (_rulerDir.lengthSq() < 1e-12) _rulerDir.set(0, 0, 1);
+  _rulerDir.normalize();
+  camera.position.copy(controls.target).addScaledVector(_rulerDir, d);
+  camera.near = Math.max(d / 100, 1e-5);
+  camera.far = Math.max(d * 200, 100);
+  camera.updateProjectionMatrix();
+  controls.update();
+  markActive();
+}
+
+// Zoom so the model appears at its real size on the screen. If that would be
+// far bigger than the screen, show the whole model instead; the ruler then
+// still reads true lengths.
+function rulerLifeSize() {
+  const info = rulerModelInfo();
+  if (!info) { rulerRefreshNote(); return false; }
+  const targetPxPerMm = ruler.pxPerCm / 10;
+  const lifePx = info.realMaxMm * targetPxPerMm;
+  let d;
+  if (lifePx > Math.max(container.clientWidth, container.clientHeight) * 1.6) {
+    ruler.tooBig = true;
+    d = currentModel.userData.frameDistance || camera.position.distanceTo(controls.target);
+  } else {
+    ruler.tooBig = false;
+    const worldH = info.sceneUnitsPerMm * container.clientHeight / targetPxPerMm;
+    d = worldH / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2));
+  }
+  if (d > controls.maxDistance) controls.maxDistance = d * 1.5;
+  if (d < controls.minDistance) controls.minDistance = d * 0.5;
+  rulerSetCameraDistance(d);
+  rulerDraw(rulerPxPerMmNow());
+  rulerRefreshNote();
+  return true;
+}
+
+// Is the ruler lying over the model on screen?
+const _rulerBox = new THREE.Box3();
+const _rulerV = new THREE.Vector3();
+const _rulerSize = new THREE.Vector3();
+function rulerOverlapsModel() {
+  if (!currentModel) return false;
+  _rulerBox.setFromObject(currentModel);
+  _rulerBox.getCenter(_rulerV);
+  _rulerBox.getSize(_rulerSize);
+  const radius = _rulerSize.length() / 2;
+  const d = camera.position.distanceTo(_rulerV);
+  const worldH = 2 * d * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+  if (!(worldH > 0)) return false;
+  const rPx = radius * (container.clientHeight / worldH);
+  _rulerV.project(camera);
+  const sx = (_rulerV.x * 0.5 + 0.5) * container.clientWidth;
+  const sy = (-_rulerV.y * 0.5 + 0.5) * container.clientHeight;
+  const a = THREE.MathUtils.degToRad(ruler.angle);
+  const hx = Math.cos(a) * ruler.length / 2, hy = Math.sin(a) * ruler.length / 2;
+  const x1 = ruler.cx - hx, y1 = ruler.cy - hy, x2 = ruler.cx + hx, y2 = ruler.cy + hy;
+  const vx = x2 - x1, vy = y2 - y1;
+  const len2 = vx * vx + vy * vy || 1;
+  const t = Math.max(0, Math.min(1, ((sx - x1) * vx + (sy - y1) * vy) / len2));
+  return Math.hypot(sx - (x1 + t * vx), sy - (y1 + t * vy)) <= rPx + 10;
+}
+
+// ----- drawing and layout -----
+function rulerLayout() {
+  rulerWrap.style.width = ruler.length + 'px';
+  rulerWrap.style.height = RULER_H + 'px';
+  rulerWrap.style.left = (ruler.cx - ruler.length / 2) + 'px';
+  rulerWrap.style.top = (ruler.cy - RULER_H / 2) + 'px';
+  rulerWrap.style.transform = 'rotate(' + ruler.angle + 'deg)';
+}
+function rulerDraw(pxPerMm) {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const W = ruler.length, H = RULER_H;
+  const pw = Math.round(W * dpr), ph = Math.round(H * dpr);
+  if (rulerCanvas.width !== pw || rulerCanvas.height !== ph) { rulerCanvas.width = pw; rulerCanvas.height = ph; }
+  const ctx = rulerCanvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  rulerPaint(ctx, W, H, pxPerMm);
+  ruler.drawnPxPerMm = pxPerMm;
+  ruler.drawnW = W;
+}
+// Called every frame while the ruler is showing; redraws only when the zoom
+// (or the ruler's length) has actually changed.
+function rulerTick() {
+  const p = rulerPxPerMmNow();
+  if (ruler.length !== ruler.drawnW || Math.abs(p - ruler.drawnPxPerMm) > ruler.drawnPxPerMm * 0.002) {
+    rulerDraw(p);
+    rulerRefreshNote();
+  }
+}
+function rulerPercentText(ratio) {
+  if (ratio >= 1.03) return '×' + (ratio >= 10 ? ratio.toFixed(0) : ratio.toFixed(1)) + ' life size';
+  const pct = Math.round(ratio * 100);
+  return (pct < 1 ? 'under 1' : String(pct)) + '% of life size';
+}
+function rulerRefreshNote() {
+  if (!panels.rulerPanel.classList.contains('open')) return;
+  const note = document.getElementById('rulerNote');
+  if (!currentModel) { note.textContent = 'Load a model first.'; return; }
+  const info = rulerModelInfo();
+  if (!info) {
+    note.textContent = "This model's real size isn't saved yet, so the ruler is only a plain screen ruler.\nEnter the real length of its longest side below and tap Save size.";
+    return;
+  }
+  const ratio = rulerPxPerMmNow() / (ruler.pxPerCm / 10);
+  let t = 'Real size (longest side): ' + formatRealWorldDistance(info.realMaxMm) + '.\n';
+  t += (Math.abs(ratio - 1) < 0.03) ? 'Shown at life size ✓' : 'Shown at ' + rulerPercentText(ratio) + '.';
+  t += ' The ruler reads true lengths at any zoom.';
+  if (ruler.tooBig && ratio < 0.97) t += '\nToo big to show at true size on this screen.';
+  note.textContent = t;
+}
+
+// ----- show / hide -----
+function rulerShow() {
+  ruler.visible = true;
+  if (!ruler.cx) { ruler.cx = window.innerWidth / 2; ruler.cy = window.innerHeight * 0.62; }
+  ruler.length = Math.min(ruler.length, Math.max(window.innerWidth, window.innerHeight) - 20);
+  rulerWrap.classList.add('visible');
+  document.getElementById('rulerBtn').classList.add('ruler-on');
+  rulerLayout();
+  if (ruler.auto && rulerModelInfo()) rulerLifeSize();
+  else rulerDraw(rulerPxPerMmNow());
+}
+function rulerHide() {
+  ruler.visible = false;
+  rulerWrap.classList.remove('visible');
+  document.getElementById('rulerBtn').classList.remove('ruler-on');
+  if (panels.rulerPanel.classList.contains('open')) closeAllPanels();
+}
+
+// ----- panel -----
+function rulerPrefillRealSize() {
+  const input = document.getElementById('rulerRealInput');
+  const sel = document.getElementById('rulerRealUnit');
+  const info = rulerModelInfo();
+  if (!info) { input.value = ''; return; }
+  const mm = info.realMaxMm;
+  let unit, val;
+  if (mm < 10) { unit = 'mm'; val = mm; }
+  else if (mm < 1000) { unit = 'cm'; val = mm / 10; }
+  else { unit = 'm'; val = mm / 1000; }
+  sel.value = unit;
+  input.value = String(Math.round(val * 100) / 100);
+}
+function syncRulerPanel() {
+  const lenEl = document.getElementById('rulerLength');
+  lenEl.max = String(Math.max(window.innerWidth, window.innerHeight) - 20);
+  lenEl.value = String(ruler.length);
+  document.getElementById('rulerAngle').value = String(ruler.angle);
+  document.getElementById('rulerAuto').checked = ruler.auto;
+  document.getElementById('rulerCalib').value = String(ruler.pxPerCm);
+  document.getElementById('rulerCalibBar').style.width = (5 * ruler.pxPerCm) + 'px';
+  rulerPrefillRealSize();
+  rulerRefreshNote();
+}
+function openRulerPanel() {
+  closeAllPanels();
+  panels.rulerPanel.classList.add('open');
+  document.getElementById('rulerBtn').classList.add('active');
+  syncRulerPanel();
+}
+// The model changed (new file loaded, or its real size was saved).
+function rulerOnModelChanged() {
+  if (panels.rulerPanel.classList.contains('open')) syncRulerPanel();
+  if (!ruler.visible) return;
+  if (ruler.auto && rulerModelInfo()) rulerLifeSize();
+  else { rulerDraw(rulerPxPerMmNow()); rulerRefreshNote(); }
+}
+
+document.getElementById('rulerBtn').addEventListener('click', () => {
+  if (!ruler.visible) { rulerShow(); openRulerPanel(); }
+  else if (panels.rulerPanel.classList.contains('open')) closeAllPanels();
+  else openRulerPanel();
+});
+document.getElementById('rulerClose').addEventListener('click', rulerHide);
+document.getElementById('rulerHideBtn').addEventListener('click', rulerHide);
+
+document.getElementById('rulerSaveSizeBtn').addEventListener('click', () => {
+  const note = document.getElementById('rulerNote');
+  if (!currentModel || !currentModel.userData.fileMaxDim) { note.textContent = 'Load a model first.'; return; }
+  const v = parseFloat(document.getElementById('rulerRealInput').value);
+  if (!(v > 0)) { note.textContent = 'Enter a number bigger than 0.'; return; }
+  const unitToMm = { mm: 1, cm: 10, m: 1000, in: 25.4 };
+  const mm = v * unitToMm[document.getElementById('rulerRealUnit').value];
+  const mmPerFileUnit = mm / currentModel.userData.fileMaxDim;
+  currentModel.userData.realWorldMmPerFileUnit = mmPerFileUnit;
+  ldjSaveModelSize(currentFileName, mmPerFileUnit);
+  if (!ruler.visible) rulerShow();
+  if (ruler.auto) rulerLifeSize(); else { rulerDraw(rulerPxPerMmNow()); }
+  rulerRefreshNote();
+  showToast('Real size saved for this model.', 2500);
+});
+document.getElementById('rulerLifeBtn').addEventListener('click', () => {
+  if (!ruler.visible) rulerShow();
+  rulerLifeSize();
+});
+document.getElementById('rulerAuto').addEventListener('change', (e) => { ruler.auto = e.target.checked; rulerSaveSettings(); });
+
+document.getElementById('rulerLength').addEventListener('input', (e) => {
+  ruler.length = parseInt(e.target.value, 10) || 320;
+  rulerLayout();
+});
+document.getElementById('rulerLength').addEventListener('change', rulerSaveSettings);
+document.getElementById('rulerAngle').addEventListener('input', (e) => {
+  ruler.angle = parseFloat(e.target.value) || 0;
+  rulerLayout();
+});
+document.getElementById('rulerAngle').addEventListener('change', rulerSaveSettings);
+function rulerSetAngle(a) {
+  ruler.angle = a;
+  document.getElementById('rulerAngle').value = String(Math.min(a, 175));
+  rulerLayout();
+  rulerSaveSettings();
+}
+document.getElementById('rulerHorizBtn').addEventListener('click', () => rulerSetAngle(0));
+document.getElementById('rulerVertBtn').addEventListener('click', () => rulerSetAngle(90));
+document.getElementById('rulerCalib').addEventListener('input', (e) => {
+  ruler.pxPerCm = parseFloat(e.target.value) || 63;
+  document.getElementById('rulerCalibBar').style.width = (5 * ruler.pxPerCm) + 'px';
+  rulerRefreshNote();
+});
+document.getElementById('rulerCalib').addEventListener('change', () => {
+  rulerSaveSettings();
+  if (ruler.visible && !rulerModelInfo()) rulerDraw(rulerPxPerMmNow());
+});
+
+// ----- dragging the ruler -----
+let rulerDrag = null;
+rulerBox.addEventListener('pointerdown', (e) => {
+  rulerDrag = { id: e.pointerId, sx: e.clientX, sy: e.clientY, cx0: ruler.cx, cy0: ruler.cy, moved: false };
+  try { rulerBox.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+});
+rulerBox.addEventListener('pointermove', (e) => {
+  if (!rulerDrag || e.pointerId !== rulerDrag.id) return;
+  const dx = e.clientX - rulerDrag.sx, dy = e.clientY - rulerDrag.sy;
+  if (!rulerDrag.moved && Math.hypot(dx, dy) < 4) return;
+  rulerDrag.moved = true;
+  ruler.cx = Math.min(Math.max(rulerDrag.cx0 + dx, 0), window.innerWidth);
+  ruler.cy = Math.min(Math.max(rulerDrag.cy0 + dy, 0), window.innerHeight);
+  rulerLayout();
+});
+function rulerEndDrag() {
+  if (!rulerDrag) return;
+  const moved = rulerDrag.moved;
+  rulerDrag = null;
+  // "Taking the ruler to the specimen": dropping it on the model resizes the model to life size.
+  if (moved && ruler.auto && rulerModelInfo() && rulerOverlapsModel()) rulerLifeSize();
+}
+rulerBox.addEventListener('pointerup', rulerEndDrag);
+rulerBox.addEventListener('pointercancel', rulerEndDrag);
+window.addEventListener('resize', () => {
+  if (!ruler.visible) return;
+  ruler.cx = Math.min(ruler.cx, window.innerWidth);
+  ruler.cy = Math.min(ruler.cy, window.innerHeight);
+  rulerLayout();
+  ruler.drawnW = 0;
+});
+
 // ---------- SAFE APP UPDATE ----------
 // Clears the app's cached copy and the service worker, then reloads, so the
 // newest uploaded version is fetched. Saved descriptions live in IndexedDB,
@@ -3426,6 +3916,7 @@ function animate(now) {
   }
   syncShadowWithModel(now);
   controls.update();
+  if (ruler.visible) rulerTick();
   if (typeof updateMeasureMarkerScale === 'function' && measureMarkers.length > 0) {
     updateMeasureMarkerScale();
   }

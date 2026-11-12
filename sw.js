@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fossil-viewer-v50';
+const CACHE_NAME = 'fossil-viewer-v51';
 
 const URLS_TO_CACHE = [
   './',
