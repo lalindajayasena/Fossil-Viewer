@@ -485,6 +485,73 @@
   .ruler-help { font-size: 12px; color: var(--text-secondary); line-height: 1.5; margin-top: 4px; }
   #rulerNote { font-size: 12.5px; color: var(--text-secondary); line-height: 1.5; white-space: pre-line; }
   #rulerCalibBar { height: 14px; background: var(--accent); border-radius: 3px; margin-top: 8px; max-width: 100%; }
+  /* --- Numbered points --- */
+  #annotLayer { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 5; pointer-events: none; overflow: hidden; }
+  .annot-marker {
+    position: absolute; left: -14px; top: -14px;
+    width: 28px; height: 28px; padding: 0;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    background: var(--accent); color: #1a1a1a;
+    font-size: 13px; font-weight: 700; line-height: 1;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.45);
+    pointer-events: auto;
+    will-change: transform;
+  }
+  .annot-marker.selected { background: #fff; border-color: var(--accent); box-shadow: 0 0 0 4px rgba(202,164,92,0.55), 0 1px 6px rgba(0,0,0,0.45); }
+  .annot-marker.back { opacity: 0.3; pointer-events: none; }   /* on the far side of the model */
+  .annot-badge {
+    width: 26px; height: 26px; flex-shrink: 0; border-radius: 50%;
+    background: var(--accent); color: #1a1a1a;
+    font-size: 13px; font-weight: 700;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  #annotCard {
+    position: fixed; left: 14px; right: 14px; bottom: 14px;
+    max-height: 42vh; overflow-y: auto;
+    z-index: 30; display: none;
+    background: var(--panel-bg); border: 1px solid var(--panel-border);
+    border-radius: 14px; box-shadow: 0 4px 24px rgba(0,0,0,0.25);
+    padding: 14px; box-sizing: border-box;
+  }
+  #annotCard.open { display: block; }
+  /* While typing, the card moves to the top so the keyboard never covers it. */
+  #annotCard.editing { top: 14px; bottom: auto; max-height: 72vh; }
+  #annotCardEdit { display: none; }
+  #annotCard.editing #annotCardEdit { display: block; }
+  #annotCard.editing #annotCardView { display: none; }
+  .annot-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  #annotCardTitle, #annotEditHeading { flex: 1; font-size: 15px; font-weight: 700; color: var(--text-primary); }
+  .annot-close { background: var(--close-btn-bg); border: none; width: 28px; height: 28px; border-radius: 50%; font-size: 13px; color: var(--icon-text); }
+  #annotCardText { font-size: 14px; line-height: 1.55; color: var(--text-primary); white-space: pre-wrap; }
+  #annotCardText.empty { color: var(--text-muted); font-style: italic; }
+  .annot-card-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .annot-card-actions button {
+    background: var(--icon-bg); color: var(--icon-text);
+    border: 1px solid var(--icon-border); border-radius: 9px;
+    padding: 8px 14px; font-size: 13px; font-weight: 600; font-family: inherit;
+  }
+  #annotSaveBtn { background: var(--accent) !important; color: #1a1a1a !important; border-color: var(--accent) !important; }
+  #annotCardEdit input, #annotCardEdit textarea {
+    width: 100%; box-sizing: border-box; padding: 10px; margin-top: 6px;
+    border-radius: 8px; border: 1px solid var(--icon-border);
+    background: var(--panel-bg); color: var(--text-primary);
+    font-family: inherit; font-size: 14px;
+  }
+  #annotCardEdit textarea { min-height: 110px; resize: vertical; }
+  #annotAddBanner {
+    position: fixed; top: 14px; left: 50%; transform: translateX(-50%);
+    z-index: 35; display: none; align-items: center; gap: 10px;
+    max-width: 92%; padding: 8px 8px 8px 16px;
+    border-radius: 22px; background: rgba(30,28,25,0.9); color: #fff;
+    font-size: 13px; line-height: 1.35;
+  }
+  #annotAddBanner.show { display: flex; }
+  #annotAddBanner button { border: none; border-radius: 16px; padding: 6px 12px; background: rgba(255,255,255,0.18); color: #fff; font-size: 12.5px; font-family: inherit; }
+  .annot-row { display: flex; align-items: center; gap: 10px; padding: 9px 4px; border-bottom: 1px solid var(--divider); cursor: pointer; }
+  .annot-row-label { flex: 1; min-width: 0; font-size: 13.5px; color: var(--icon-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #annotList { margin-top: 10px; }
+  #annotNote { font-size: 12px; color: var(--text-secondary); margin-top: 8px; line-height: 1.5; }
   #toast {
     position: fixed;
     top: 14px;
@@ -805,7 +872,7 @@
   <div id="centerUploadMsg"></div>
   <button type="button" id="welcomePicsBtn">🖼 Upload-screen pictures</button>
   <button type="button" id="updateAppBtn">⟳ Check for app update</button>
-  <div id="appVersionLabel">Version v51</div>
+  <div id="appVersionLabel">Version v52</div>
 </div>
 
 <div id="topbar">
@@ -834,6 +901,7 @@
     <button class="btn-icon" id="subtitleBtn" title="Play description as subtitles">💬</button>
     <button class="btn-icon" id="bgBtn" title="Background pictures">🖼</button>
     <button class="btn-icon" id="rulerBtn" title="Ruler"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="8" width="20" height="8" rx="1.5"/><path d="M6 8v3M10 8v4.5M14 8v3M18 8v4.5"/></svg></button>
+    <button class="btn-icon" id="annotBtn" title="Numbered points">📌</button>
     <button class="btn-icon" id="invertRotateBtn" title="Flip rotation direction">⇄</button>
     <button class="btn-icon" id="themeToggleBtn" title="Toggle dark mode">🌙</button>
     <button class="btn-icon" id="fullscreenBtn" title="Full view">⛶</button>
@@ -1013,6 +1081,55 @@
   <button type="button" class="btn" id="rulerHideBtn" style="margin-top:14px;">Hide ruler</button>
 </div>
 
+<!-- Numbered points (annotations): markers pinned to the model, a card that shows each description -->
+<div id="annotLayer"></div>
+
+<div id="annotAddBanner">
+  <span id="annotAddText">Tap the model where you want the number</span>
+  <button type="button" id="annotAddCancel">Cancel</button>
+</div>
+
+<div id="annotCard">
+  <div id="annotCardView">
+    <div class="annot-card-head">
+      <span class="annot-badge" id="annotCardNum">1</span>
+      <span id="annotCardTitle"></span>
+      <button type="button" class="annot-close" id="annotCardClose" title="Close">✕</button>
+    </div>
+    <div id="annotCardText"></div>
+    <div class="annot-card-actions">
+      <button type="button" id="annotPrevBtn" title="Previous point">◀</button>
+      <button type="button" id="annotNextBtn" title="Next point">▶</button>
+      <button type="button" id="annotEditBtn">✎ Edit</button>
+      <button type="button" id="annotDeleteBtn">🗑 Delete</button>
+    </div>
+  </div>
+  <div id="annotCardEdit">
+    <div class="annot-card-head">
+      <span class="annot-badge" id="annotEditNum">1</span>
+      <span id="annotEditHeading">Describe this part</span>
+    </div>
+    <input type="text" id="annotTitleInput" placeholder="Title (optional), e.g. Skull" maxlength="80">
+    <textarea id="annotTextInput" placeholder="Write about this part of the specimen…"></textarea>
+    <div class="annot-card-actions">
+      <button type="button" id="annotSaveBtn">Save</button>
+      <button type="button" id="annotCancelBtn">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Numbered points panel -->
+<div class="panel" id="annotPanel">
+  <div class="panel-title">Numbered points <button class="panel-close" data-close="annotPanel">✕</button></div>
+  <div class="ruler-help">Pin numbers on parts of the specimen and describe each one. Tap a number on the model to read its description.</div>
+  <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--icon-text); margin-top:12px;">
+    <input type="checkbox" id="annotShow"> Show the numbers on the model
+  </label>
+  <button type="button" class="btn" id="annotAddBtn" style="margin-top:12px;">＋ Add a numbered point</button>
+  <div id="annotList"></div>
+  <div id="annotNote"></div>
+</div>
+
 <div id="toast"></div>
 
 <div id="loading">
@@ -1087,7 +1204,7 @@ import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 const container = document.getElementById('canvas-container');
-const APP_VERSION = 'v51';
+const APP_VERSION = 'v52';
 // True while background pictures are showing; the 3D scene then becomes see-through.
 let bgSlideshowActive = false;
 // Rendering bookkeeping, declared up here because early setup code touches it.
@@ -1493,14 +1610,20 @@ document.getElementById('descBackupBtn').addEventListener('click', () => {
   const noteEl = document.getElementById('descBackupNote');
   noteEl.textContent = 'Preparing backup...';
   getAllDescriptions().then((entries) => {
-    if (entries.length === 0) {
-      noteEl.textContent = 'No saved descriptions to back up yet.';
+    const annotations = annotLoadAll();
+    const modelSizes = ldjLoadModelSizes();
+    const annotCount = Object.keys(annotations).length;
+    const sizeCount = Object.keys(modelSizes).length;
+    if (entries.length === 0 && annotCount === 0 && sizeCount === 0) {
+      noteEl.textContent = 'Nothing saved to back up yet.';
       return;
     }
     const payload = {
       app: 'LDJ 3D Viewer',
       exportedAt: new Date().toISOString(),
-      descriptions: entries
+      descriptions: entries,
+      annotations: annotations,
+      modelSizes: modelSizes
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -1511,7 +1634,9 @@ document.getElementById('descBackupBtn').addEventListener('click', () => {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    noteEl.textContent = 'Backup downloaded ✓ (' + entries.length + ' description' + (entries.length === 1 ? '' : 's') + ')';
+    noteEl.textContent = 'Backup downloaded ✓ (' + entries.length + ' description' + (entries.length === 1 ? '' : 's') + ', ' +
+      annotCount + ' model' + (annotCount === 1 ? '' : 's') + ' with numbered points, ' +
+      sizeCount + ' saved size' + (sizeCount === 1 ? '' : 's') + ')';
   });
 });
 
@@ -1526,15 +1651,33 @@ document.getElementById('descRestoreInput').addEventListener('change', (e) => {
     try {
       const payload = JSON.parse(evt.target.result);
       const entries = Array.isArray(payload.descriptions) ? payload.descriptions : [];
-      if (entries.length === 0) {
-        noteEl.textContent = 'That file has no descriptions in it.';
+      const backedAnnots = (payload.annotations && typeof payload.annotations === 'object') ? payload.annotations : {};
+      const backedSizes = (payload.modelSizes && typeof payload.modelSizes === 'object') ? payload.modelSizes : {};
+      const annotNames = Object.keys(backedAnnots);
+      const sizeNames = Object.keys(backedSizes);
+      if (entries.length === 0 && annotNames.length === 0 && sizeNames.length === 0) {
+        noteEl.textContent = 'That file has nothing to restore.';
         return;
+      }
+      // Numbered points and saved sizes are merged into what is already on this phone.
+      if (annotNames.length) {
+        const all = annotLoadAll();
+        annotNames.forEach((n) => { if (Array.isArray(backedAnnots[n])) all[n] = backedAnnots[n]; });
+        annotSaveAll(all);
+      }
+      if (sizeNames.length) {
+        const all = ldjLoadModelSizes();
+        sizeNames.forEach((n) => { if (backedSizes[n] > 0) all[n] = backedSizes[n]; });
+        try { localStorage.setItem(MODEL_SIZES_KEY, JSON.stringify(all)); } catch (err) { /* ignore */ }
       }
       Promise.all(entries.map((entry) => saveDescription(entry.fileName, entry.text)))
         .then(() => {
-          noteEl.textContent = 'Restored ✓ (' + entries.length + ' description' + (entries.length === 1 ? '' : 's') + ')';
+          noteEl.textContent = 'Restored ✓ (' + entries.length + ' description' + (entries.length === 1 ? '' : 's') + ', ' +
+            annotNames.length + ' model' + (annotNames.length === 1 ? '' : 's') + ' with numbered points, ' +
+            sizeNames.length + ' saved size' + (sizeNames.length === 1 ? '' : 's') + ')';
           refreshReadDescButton();
           if (currentFileName) loadDescriptionForCurrentFile();
+          if (currentModel) { applySavedModelSize(currentModel); annotOnModelChanged(); rulerOnModelChanged(); }
         });
     } catch (err) {
       noteEl.textContent = 'Could not read that backup file.';
@@ -1800,6 +1943,7 @@ function addMeshToScene(mesh) {
   ldjPickerMark('done');
   if (typeof bgOnModelChanged === 'function') bgOnModelChanged();
   if (typeof rulerOnModelChanged === 'function') rulerOnModelChanged();
+  if (typeof annotOnModelChanged === 'function') annotOnModelChanged();
   document.getElementById('topbar').classList.add('model-loaded');
   document.getElementById('floatingUploadWrap').classList.add('visible');
   updateProperties(mesh, currentFileName, currentFileSize);
@@ -2350,7 +2494,8 @@ const panels = {
   customizePanel: document.getElementById('customizePanel'),
   scalePanel: document.getElementById('scalePanel'),
   bgPanel: document.getElementById('bgPanel'),
-  rulerPanel: document.getElementById('rulerPanel')
+  rulerPanel: document.getElementById('rulerPanel'),
+  annotPanel: document.getElementById('annotPanel')
 };
 
 function closeAllPanels() {
@@ -2364,6 +2509,7 @@ function closeAllPanels() {
   document.getElementById('scaleBtn').classList.remove('active');
   document.getElementById('bgBtn').classList.remove('active');
   document.getElementById('rulerBtn').classList.remove('active');
+  document.getElementById('annotBtn').classList.remove('active');
   interactionMode = 'none';
 }
 
@@ -2406,7 +2552,8 @@ const BUTTON_LABELS = {
   themeToggleBtn: 'Dark / Light Mode',
   subtitleBtn: 'Play Description as Subtitles',
   bgBtn: 'Background Pictures',
-  rulerBtn: 'Ruler'
+  rulerBtn: 'Ruler',
+  annotBtn: 'Numbered Points'
 };
 
 function getCurrentToolbarOrder() {
@@ -3833,6 +3980,352 @@ window.addEventListener('resize', () => {
   ruler.drawnW = 0;
 });
 
+// ---------- NUMBERED POINTS (ANNOTATIONS) ----------
+// Numbered markers pinned to spots on the specimen, like Sketchfab. Each point
+// is stored in the model's own coordinates, so it stays on the same spot while
+// the model is rotated, and it comes back every time the same file is opened
+// (matched by file name, like descriptions). Tap a number to read its text.
+const ANNOT_KEY = 'ldjAnnotations';
+const ANNOT_SHOW_KEY = 'ldjAnnotShow';
+const annotLayer = document.getElementById('annotLayer');
+const annotCard = document.getElementById('annotCard');
+const annot = { items: [], els: [], show: true, adding: false, selected: -1, editingNew: false, layerShown: true };
+try { annot.show = localStorage.getItem(ANNOT_SHOW_KEY) !== 'false'; } catch (e) { /* default: show */ }
+
+function annotLoadAll() {
+  try { return JSON.parse(localStorage.getItem(ANNOT_KEY) || '{}') || {}; } catch (e) { return {}; }
+}
+function annotSaveAll(all) {
+  try { localStorage.setItem(ANNOT_KEY, JSON.stringify(all)); return true; } catch (e) { return false; }
+}
+// Keeps only well-formed points (a damaged backup must never break the app).
+function annotSanitize(list) {
+  if (!Array.isArray(list)) return [];
+  return list.filter((it) => it && isFinite(it.x) && isFinite(it.y) && isFinite(it.z)).map((it) => {
+    const out = { x: +it.x, y: +it.y, z: +it.z, title: String(it.title || ''), text: String(it.text || '') };
+    if (isFinite(it.nx) && isFinite(it.ny) && isFinite(it.nz)) { out.nx = +it.nx; out.ny = +it.ny; out.nz = +it.nz; }
+    return out;
+  });
+}
+function annotLoadFor(name) { return annotSanitize(annotLoadAll()[name]); }
+function annotPersist() {
+  if (!currentFileName) return;
+  const all = annotLoadAll();
+  if (annot.items.length) all[currentFileName] = annot.items; else delete all[currentFileName];
+  if (!annotSaveAll(all)) showToast('Could not save: the phone has no free storage for it.', 4000);
+}
+
+// ----- keeping the markers on their spots -----
+const _annV = new THREE.Vector3();
+const _annN = new THREE.Vector3();
+const _annC = new THREE.Vector3();
+const _annNM = new THREE.Matrix3();
+function annotHideLayer(hide) {
+  if (annot.layerShown === !hide) return;
+  annot.layerShown = !hide;
+  annotLayer.style.display = hide ? 'none' : '';
+}
+function annotUpdate() {
+  if (!currentModel || !annot.show || annot.items.length === 0) { annotHideLayer(true); return; }
+  annotHideLayer(false);
+  camera.updateMatrixWorld();
+  currentModel.updateMatrixWorld();
+  _annNM.getNormalMatrix(currentModel.matrixWorld);
+  const w = container.clientWidth, h = container.clientHeight;
+  for (let i = 0; i < annot.items.length; i++) {
+    const it = annot.items[i], el = annot.els[i];
+    if (!el) continue;
+    _annV.set(it.x, it.y, it.z).applyMatrix4(currentModel.matrixWorld);
+    // Is this spot on the side of the model facing you? If not, fade the number
+    // (a cheap stand-in for hiding it behind the surface).
+    let facing = 1;
+    if (it.nx !== undefined) {
+      _annN.set(it.nx, it.ny, it.nz).applyMatrix3(_annNM).normalize();
+      _annC.subVectors(camera.position, _annV).normalize();
+      facing = _annN.dot(_annC);
+    }
+    _annC.copy(_annV).applyMatrix4(camera.matrixWorldInverse);   // camera space: negative z is in front
+    const inFront = _annC.z < 0;
+    _annV.project(camera);
+    const x = (_annV.x * 0.5 + 0.5) * w;
+    const y = (-_annV.y * 0.5 + 0.5) * h;
+    const onScreen = inFront && x > -30 && x < w + 30 && y > -30 && y < h + 30;
+    const state = !onScreen ? 0 : (facing < 0.05 ? 1 : 2);
+    if (el._state !== state) {
+      el._state = state;
+      el.style.display = state === 0 ? 'none' : '';
+      el.classList.toggle('back', state === 1);
+    }
+    if (state !== 0) {
+      const tx = Math.round(x * 10) / 10, ty = Math.round(y * 10) / 10;
+      if (el._x !== tx || el._y !== ty) {
+        el._x = tx; el._y = ty;
+        el.style.transform = 'translate(' + tx + 'px,' + ty + 'px)';
+      }
+    }
+  }
+}
+function annotRebuildMarkers() {
+  annotLayer.innerHTML = '';
+  annot.els = annot.items.map((it, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'annot-marker' + (i === annot.selected ? ' selected' : '');
+    b.textContent = String(i + 1);
+    b.addEventListener('click', (e) => { e.stopPropagation(); annotSelect(i, true); });
+    annotLayer.appendChild(b);
+    return b;
+  });
+  annotUpdate();
+  markActive();
+}
+function annotMarkSelected() {
+  annot.els.forEach((el, k) => el.classList.toggle('selected', k === annot.selected));
+}
+
+// ----- turning the model so a chosen part faces you -----
+// This app rotates the model itself (not the camera), so "fly to this point"
+// means gently turning the model until that spot faces you.
+const _annBox = new THREE.Box3();
+const _annCenter = new THREE.Vector3();
+const _annQNow = new THREE.Quaternion();
+const _annQStep = new THREE.Quaternion();
+const _annQInv = new THREE.Quaternion();
+const _annIdent = new THREE.Quaternion();
+const annotTween = { active: false, t0: 0, dur: 450, q: new THREE.Quaternion(), prev: new THREE.Quaternion(), center: new THREE.Vector3() };
+function annotFaceCamera(i) {
+  const it = annot.items[i];
+  if (!it || it.nx === undefined || !currentModel) return;
+  currentModel.updateMatrixWorld(true);
+  _annNM.getNormalMatrix(currentModel.matrixWorld);
+  _annN.set(it.nx, it.ny, it.nz).applyMatrix3(_annNM).normalize();
+  _annBox.setFromObject(currentModel);
+  _annBox.getCenter(_annCenter);
+  _annC.subVectors(camera.position, _annCenter).normalize();
+  if (_annN.dot(_annC) > 0.6) return;            // already clearly facing you
+  annotTween.q.setFromUnitVectors(_annN, _annC);
+  annotTween.prev.identity();
+  annotTween.center.copy(_annCenter);
+  annotTween.t0 = performance.now();
+  annotTween.active = true;
+  markActive();
+}
+function annotTweenStep(now) {
+  if (!annotTween.active || !currentModel) { annotTween.active = false; return; }
+  const k = Math.min(1, Math.max(0, (now - annotTween.t0) / annotTween.dur));
+  const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;      // ease in and out
+  _annQNow.copy(_annIdent).slerp(annotTween.q, e);
+  _annQStep.copy(_annQNow).multiply(_annQInv.copy(annotTween.prev).invert());
+  annotTween.prev.copy(_annQNow);
+  currentModel.position.sub(annotTween.center).applyQuaternion(_annQStep).add(annotTween.center);
+  currentModel.quaternion.premultiply(_annQStep);
+  if (k >= 1) annotTween.active = false;
+  markActive();
+}
+
+// ----- the description card -----
+function annotLabel(it, i) {
+  if (it.title) return it.title;
+  const t = (it.text || '').replace(/\s+/g, ' ').trim();
+  return t ? t.slice(0, 60) : 'Part ' + (i + 1);
+}
+function annotSelect(i, focus) {
+  const it = annot.items[i];
+  if (!it) return;
+  closeAllPanels();
+  annot.selected = i;
+  annotMarkSelected();
+  document.getElementById('annotCardNum').textContent = String(i + 1);
+  document.getElementById('annotCardTitle').textContent = it.title || 'Part ' + (i + 1);
+  const textEl = document.getElementById('annotCardText');
+  textEl.textContent = it.text || 'No description yet. Tap Edit to add one.';
+  textEl.classList.toggle('empty', !it.text);
+  annotCard.classList.remove('editing');
+  annotCard.classList.add('open');
+  if (focus) annotFaceCamera(i);
+}
+function annotCloseCard() {
+  annotCard.classList.remove('open', 'editing');
+  annot.selected = -1;
+  annotMarkSelected();
+}
+function annotEdit(i, isNew) {
+  const it = annot.items[i];
+  if (!it) return;
+  closeAllPanels();
+  annot.selected = i;
+  annot.editingNew = !!isNew;
+  annotMarkSelected();
+  document.getElementById('annotEditNum').textContent = String(i + 1);
+  document.getElementById('annotEditHeading').textContent = isNew ? 'Describe this part' : 'Edit this point';
+  document.getElementById('annotTitleInput').value = it.title || '';
+  document.getElementById('annotTextInput').value = it.text || '';
+  annotCard.classList.add('open', 'editing');
+}
+function annotSaveEdit() {
+  const i = annot.selected;
+  const it = annot.items[i];
+  if (!it) return;
+  it.title = document.getElementById('annotTitleInput').value.trim();
+  it.text = document.getElementById('annotTextInput').value.trim();
+  annot.editingNew = false;
+  annotPersist();
+  renderAnnotPanel();
+  annotSelect(i, false);
+  showToast('Saved.', 1500);
+}
+function annotCancelEdit() {
+  const i = annot.selected;
+  if (annot.editingNew) {
+    // A brand-new point that was never saved is discarded.
+    annot.items.splice(i, 1);
+    annot.editingNew = false;
+    annotPersist();
+    annotRebuildMarkers();
+    renderAnnotPanel();
+    annotCloseCard();
+  } else {
+    annotSelect(i, false);
+  }
+}
+function annotDelete(i) {
+  if (!annot.items[i]) return;
+  if (!window.confirm('Delete point ' + (i + 1) + '? The numbers after it will move up by one.')) return;
+  annot.items.splice(i, 1);
+  annotPersist();
+  annotCloseCard();
+  annotRebuildMarkers();
+  renderAnnotPanel();
+}
+
+// ----- adding a point: tap the model -----
+function annotBeginAdd() {
+  if (!currentModel) { showToast('Load a model first.', 2500); return; }
+  closeAllPanels();
+  annotCloseCard();
+  annot.adding = true;
+  document.getElementById('annotAddText').textContent = 'Tap the model where you want number ' + (annot.items.length + 1);
+  document.getElementById('annotAddBanner').classList.add('show');
+}
+function annotCancelAdd() {
+  annot.adding = false;
+  document.getElementById('annotAddBanner').classList.remove('show');
+}
+const _annRay = new THREE.Raycaster();
+_annRay.params.Points.threshold = 0.02;
+const _annNdc = new THREE.Vector2();
+const _annInv = new THREE.Matrix4();
+function annotPlaceAt(clientX, clientY) {
+  if (!currentModel) return;
+  const rect = renderer.domElement.getBoundingClientRect();
+  _annNdc.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+  currentModel.updateMatrixWorld(true);
+  camera.updateMatrixWorld();
+  _annRay.setFromCamera(_annNdc, camera);
+  const hits = _annRay.intersectObject(currentModel, true);
+  if (!hits.length) { showToast('Tap directly on the model.', 2000); return; }
+  const hit = hits[0];
+  const local = currentModel.worldToLocal(hit.point.clone());
+  const item = { x: local.x, y: local.y, z: local.z, title: '', text: '' };
+  if (hit.face) {
+    // Normal of the surface at that spot, flipped if needed so it faces you
+    // (scans can have their faces wound either way), stored in model space.
+    const nw = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
+    if (nw.dot(_annRay.ray.direction) > 0) nw.negate();
+    nw.transformDirection(_annInv.copy(currentModel.matrixWorld).invert());
+    item.nx = nw.x; item.ny = nw.y; item.nz = nw.z;
+  }
+  const r5 = (v) => Math.round(v * 100000) / 100000;
+  ['x', 'y', 'z', 'nx', 'ny', 'nz'].forEach((k) => { if (item[k] !== undefined) item[k] = r5(item[k]); });
+  annot.items.push(item);
+  annotCancelAdd();
+  annotRebuildMarkers();
+  annotEdit(annot.items.length - 1, true);
+}
+// A short tap on the model (not a drag, not a pinch) places the point.
+let annotTapStart = null;
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  annotTween.active = false;       // touching the model cancels any automatic turn
+  annotTapStart = (annot.adding && activePointerCount <= 1) ? { x: e.clientX, y: e.clientY, t: performance.now() } : null;
+});
+renderer.domElement.addEventListener('pointerup', (e) => {
+  if (!annot.adding || !annotTapStart) return;
+  const s = annotTapStart;
+  annotTapStart = null;
+  if (Math.hypot(e.clientX - s.x, e.clientY - s.y) > 10 || performance.now() - s.t > 600) return;
+  // Finding the exact spot on a multi-million-triangle scan can take a moment,
+  // so say so first and let the message appear before the work starts.
+  const x = e.clientX, y = e.clientY;
+  showToast('Placing…', 1500);
+  setTimeout(() => annotPlaceAt(x, y), 30);
+});
+
+// ----- panel -----
+function renderAnnotPanel() {
+  if (!panels.annotPanel.classList.contains('open')) return;
+  const list = document.getElementById('annotList');
+  const note = document.getElementById('annotNote');
+  list.innerHTML = '';
+  if (!currentModel) { note.textContent = 'Load a model first.'; return; }
+  note.textContent = annot.items.length ? 'Tap a row to see that point.' : 'No numbered points on this model yet.';
+  annot.items.forEach((it, i) => {
+    const row = document.createElement('div');
+    row.className = 'annot-row';
+    const badge = document.createElement('span');
+    badge.className = 'annot-badge';
+    badge.textContent = String(i + 1);
+    const label = document.createElement('span');
+    label.className = 'annot-row-label';
+    label.textContent = annotLabel(it, i);
+    row.appendChild(badge);
+    row.appendChild(label);
+    row.addEventListener('click', () => annotSelect(i, true));
+    list.appendChild(row);
+  });
+}
+function openAnnotPanel() {
+  closeAllPanels();
+  panels.annotPanel.classList.add('open');
+  document.getElementById('annotBtn').classList.add('active');
+  document.getElementById('annotShow').checked = annot.show;
+  renderAnnotPanel();
+}
+// A model was opened: load its points.
+function annotOnModelChanged() {
+  annot.items = annotLoadFor(currentFileName);
+  annot.selected = -1;
+  annot.editingNew = false;
+  annotCancelAdd();
+  annotCard.classList.remove('open', 'editing');
+  annotRebuildMarkers();
+  renderAnnotPanel();
+}
+
+document.getElementById('annotBtn').addEventListener('click', () => {
+  if (panels.annotPanel.classList.contains('open')) closeAllPanels(); else openAnnotPanel();
+});
+document.getElementById('annotShow').addEventListener('change', (e) => {
+  annot.show = e.target.checked;
+  try { localStorage.setItem(ANNOT_SHOW_KEY, annot.show ? 'true' : 'false'); } catch (err) { /* ignore */ }
+  annotUpdate();
+  markActive();
+});
+document.getElementById('annotAddBtn').addEventListener('click', annotBeginAdd);
+document.getElementById('annotAddCancel').addEventListener('click', annotCancelAdd);
+document.getElementById('annotCardClose').addEventListener('click', annotCloseCard);
+document.getElementById('annotEditBtn').addEventListener('click', () => annotEdit(annot.selected, false));
+document.getElementById('annotDeleteBtn').addEventListener('click', () => annotDelete(annot.selected));
+document.getElementById('annotSaveBtn').addEventListener('click', annotSaveEdit);
+document.getElementById('annotCancelBtn').addEventListener('click', annotCancelEdit);
+document.getElementById('annotPrevBtn').addEventListener('click', () => {
+  if (!annot.items.length) return;
+  annotSelect((annot.selected - 1 + annot.items.length) % annot.items.length, true);
+});
+document.getElementById('annotNextBtn').addEventListener('click', () => {
+  if (!annot.items.length) return;
+  annotSelect((annot.selected + 1) % annot.items.length, true);
+});
+
 // ---------- SAFE APP UPDATE ----------
 // Clears the app's cached copy and the service worker, then reloads, so the
 // newest uploaded version is fetched. Saved descriptions live in IndexedDB,
@@ -3914,9 +4407,11 @@ function animate(now) {
     pendingDragDX = 0;
     pendingDragDY = 0;
   }
+  annotTweenStep(now);
   syncShadowWithModel(now);
   controls.update();
   if (ruler.visible) rulerTick();
+  annotUpdate();
   if (typeof updateMeasureMarkerScale === 'function' && measureMarkers.length > 0) {
     updateMeasureMarkerScale();
   }
