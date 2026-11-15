@@ -487,24 +487,36 @@
   #rulerCalibBar { height: 14px; background: var(--accent); border-radius: 3px; margin-top: 8px; max-width: 100%; }
   /* --- Numbered points --- */
   #annotLayer { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 5; pointer-events: none; overflow: hidden; }
+  /* A see-through ring with just the number inside. White with a thin dark
+     edge and a dark halo on the digits, so it stays readable on any surface. */
   .annot-marker {
     position: absolute; left: -14px; top: -14px;
     width: 28px; height: 28px; padding: 0;
     border-radius: 50%;
-    border: 2px solid #fff;
-    background: var(--accent); color: #1a1a1a;
+    border: 2px solid rgba(255,255,255,0.95);
+    background: transparent;
+    color: #fff;
     font-size: 13px; font-weight: 700; line-height: 1;
-    box-shadow: 0 1px 6px rgba(0,0,0,0.45);
+    text-shadow: 0 0 3px rgba(0,0,0,0.95), 0 0 2px rgba(0,0,0,0.95), 0 0 6px rgba(0,0,0,0.6);
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(0,0,0,0.3);
     pointer-events: auto;
+    touch-action: none;
     will-change: transform;
+    -webkit-tap-highlight-color: transparent;
   }
-  .annot-marker.selected { background: #fff; border-color: var(--accent); box-shadow: 0 0 0 4px rgba(202,164,92,0.55), 0 1px 6px rgba(0,0,0,0.45); }
+  .annot-marker.selected { border-width: 3px; box-shadow: 0 0 0 1px rgba(0,0,0,0.5), 0 0 0 5px rgba(255,255,255,0.3), inset 0 0 0 1px rgba(0,0,0,0.3); }
+  /* The point being edited can be dragged: dashed ring. */
+  .annot-marker.editing { border-style: dashed; cursor: grab; }
+  .annot-marker.dragging { border-style: dashed; box-shadow: 0 0 0 1px rgba(0,0,0,0.5), 0 0 0 8px rgba(255,255,255,0.25); }
   .annot-marker.back { opacity: 0.3; pointer-events: none; }   /* on the far side of the model */
   .annot-badge {
     width: 26px; height: 26px; flex-shrink: 0; border-radius: 50%;
-    background: var(--accent); color: #1a1a1a;
+    background: transparent;
+    border: 2px solid var(--text-primary);
+    color: var(--text-primary);
     font-size: 13px; font-weight: 700;
     display: inline-flex; align-items: center; justify-content: center;
+    box-sizing: border-box;
   }
   #annotCard {
     position: fixed; left: 14px; right: 14px; bottom: 14px;
@@ -539,15 +551,15 @@
     font-family: inherit; font-size: 14px;
   }
   #annotCardEdit textarea { min-height: 110px; resize: vertical; }
-  #annotAddBanner {
+  #annotAddBanner, #annotMoveBanner {
     position: fixed; top: 14px; left: 50%; transform: translateX(-50%);
     z-index: 35; display: none; align-items: center; gap: 10px;
     max-width: 92%; padding: 8px 8px 8px 16px;
     border-radius: 22px; background: rgba(30,28,25,0.9); color: #fff;
     font-size: 13px; line-height: 1.35;
   }
-  #annotAddBanner.show { display: flex; }
-  #annotAddBanner button { border: none; border-radius: 16px; padding: 6px 12px; background: rgba(255,255,255,0.18); color: #fff; font-size: 12.5px; font-family: inherit; }
+  #annotAddBanner.show, #annotMoveBanner.show { display: flex; }
+  #annotAddBanner button, #annotMoveBanner button { border: none; border-radius: 16px; padding: 6px 12px; background: rgba(255,255,255,0.18); color: #fff; font-size: 12.5px; font-family: inherit; }
   .annot-row { display: flex; align-items: center; gap: 10px; padding: 9px 4px; border-bottom: 1px solid var(--divider); cursor: pointer; }
   .annot-row-label { flex: 1; min-width: 0; font-size: 13.5px; color: var(--icon-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #annotList { margin-top: 10px; }
@@ -872,7 +884,7 @@
   <div id="centerUploadMsg"></div>
   <button type="button" id="welcomePicsBtn">🖼 Upload-screen pictures</button>
   <button type="button" id="updateAppBtn">⟳ Check for app update</button>
-  <div id="appVersionLabel">Version v52</div>
+  <div id="appVersionLabel">Version v53</div>
 </div>
 
 <div id="topbar">
@@ -1089,6 +1101,11 @@
   <button type="button" id="annotAddCancel">Cancel</button>
 </div>
 
+<div id="annotMoveBanner">
+  <span id="annotMoveText">Drag the number to the right spot on the model</span>
+  <button type="button" id="annotMoveDone">Done</button>
+</div>
+
 <div id="annotCard">
   <div id="annotCardView">
     <div class="annot-card-head">
@@ -1109,10 +1126,12 @@
       <span class="annot-badge" id="annotEditNum">1</span>
       <span id="annotEditHeading">Describe this part</span>
     </div>
+    <div class="ruler-help" style="margin-top:0; margin-bottom:4px;">To move this number, drag it on the model, or tap ✥ Move number if the card is in the way.</div>
     <input type="text" id="annotTitleInput" placeholder="Title (optional), e.g. Skull" maxlength="80">
     <textarea id="annotTextInput" placeholder="Write about this part of the specimen…"></textarea>
     <div class="annot-card-actions">
       <button type="button" id="annotSaveBtn">Save</button>
+      <button type="button" id="annotMoveBtn">✥ Move number</button>
       <button type="button" id="annotCancelBtn">Cancel</button>
     </div>
   </div>
@@ -1204,7 +1223,7 @@ import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 const container = document.getElementById('canvas-container');
-const APP_VERSION = 'v52';
+const APP_VERSION = 'v53';
 // True while background pictures are showing; the 3D scene then becomes see-through.
 let bgSlideshowActive = false;
 // Rendering bookkeeping, declared up here because early setup code touches it.
@@ -3989,7 +4008,8 @@ const ANNOT_KEY = 'ldjAnnotations';
 const ANNOT_SHOW_KEY = 'ldjAnnotShow';
 const annotLayer = document.getElementById('annotLayer');
 const annotCard = document.getElementById('annotCard');
-const annot = { items: [], els: [], show: true, adding: false, selected: -1, editingNew: false, layerShown: true };
+const annot = { items: [], els: [], show: true, adding: false, selected: -1, editingNew: false, layerShown: true,
+                editIndex: -1, moving: false, editBackup: null, justDragged: false };
 try { annot.show = localStorage.getItem(ANNOT_SHOW_KEY) !== 'false'; } catch (e) { /* default: show */ }
 
 function annotLoadAll() {
@@ -4034,7 +4054,7 @@ function annotUpdate() {
   const w = container.clientWidth, h = container.clientHeight;
   for (let i = 0; i < annot.items.length; i++) {
     const it = annot.items[i], el = annot.els[i];
-    if (!el) continue;
+    if (!el || el._dragging) continue;      // the marker under your finger follows your finger
     _annV.set(it.x, it.y, it.z).applyMatrix4(currentModel.matrixWorld);
     // Is this spot on the side of the model facing you? If not, fade the number
     // (a cheap stand-in for hiding it behind the surface).
@@ -4072,7 +4092,16 @@ function annotRebuildMarkers() {
     b.type = 'button';
     b.className = 'annot-marker' + (i === annot.selected ? ' selected' : '');
     b.textContent = String(i + 1);
-    b.addEventListener('click', (e) => { e.stopPropagation(); annotSelect(i, true); });
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (annot.justDragged) return;            // this click is just the end of a drag
+      if (annot.editIndex >= 0) return;         // while editing, taps on numbers are ignored
+      annotSelect(i, true);
+    });
+    b.addEventListener('pointerdown', (e) => annotMarkerPointerDown(e, i));
+    b.addEventListener('pointermove', annotMarkerPointerMove);
+    b.addEventListener('pointerup', annotMarkerPointerUp);
+    b.addEventListener('pointercancel', annotMarkerPointerCancel);
     annotLayer.appendChild(b);
     return b;
   });
@@ -4080,7 +4109,84 @@ function annotRebuildMarkers() {
   markActive();
 }
 function annotMarkSelected() {
-  annot.els.forEach((el, k) => el.classList.toggle('selected', k === annot.selected));
+  annot.els.forEach((el, k) => {
+    el.classList.toggle('selected', k === annot.selected);
+    el.classList.toggle('editing', k === annot.editIndex);
+  });
+}
+
+// ----- moving the number being edited -----
+// Drag the number with your finger; where you let go, it snaps to the
+// surface of the model. If you let go off the model it goes back.
+let annotDrag = null;
+function annotApplySpot(it, spot) {
+  it.x = spot.x; it.y = spot.y; it.z = spot.z;
+  if (spot.nx !== undefined) { it.nx = spot.nx; it.ny = spot.ny; it.nz = spot.nz; }
+  else { delete it.nx; delete it.ny; delete it.nz; }
+}
+function annotMarkerPointerDown(e, i) {
+  if (annot.editIndex !== i) return;              // only the point being edited can move
+  e.preventDefault();
+  e.stopPropagation();
+  const el = annot.els[i];
+  annotDrag = { id: e.pointerId, i, moved: false, sx: e.clientX, sy: e.clientY };
+  el._dragging = true;
+  el.classList.add('dragging');
+  try { el.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+}
+function annotMarkerPointerMove(e) {
+  if (!annotDrag || e.pointerId !== annotDrag.id) return;
+  if (!annotDrag.moved && Math.hypot(e.clientX - annotDrag.sx, e.clientY - annotDrag.sy) < 4) return;
+  annotDrag.moved = true;
+  const el = annot.els[annotDrag.i];
+  el.style.transform = 'translate(' + e.clientX + 'px,' + e.clientY + 'px)';
+  el._x = e.clientX; el._y = e.clientY;
+  markActive();
+}
+function annotMarkerPointerCancel() {
+  if (!annotDrag) return;
+  const el = annot.els[annotDrag.i];
+  annotDrag = null;
+  if (el) { el._dragging = false; el.classList.remove('dragging'); }
+  annotUpdate();
+}
+function annotMarkerPointerUp(e) {
+  if (!annotDrag || e.pointerId !== annotDrag.id) return;
+  const d = annotDrag;
+  annotDrag = null;
+  const el = annot.els[d.i];
+  if (!el) return;
+  el.classList.remove('dragging');
+  if (!d.moved) { el._dragging = false; return; }
+  annot.justDragged = true;                       // swallow the click that follows a drag
+  setTimeout(() => { annot.justDragged = false; }, 400);
+  const x = e.clientX, y = e.clientY;
+  showToast('Moving…', 1500);
+  setTimeout(() => {
+    const spot = annotSurfaceAt(x, y);
+    el._dragging = false;
+    const it = annot.items[d.i];
+    if (spot && it) {
+      annotApplySpot(it, spot);
+      showToast('Moved. Tap Save to keep it.', 2200);
+    } else {
+      showToast('Drop the number on the model.', 2200);
+    }
+    annotUpdate();
+    markActive();
+  }, 30);
+}
+function annotStartMove() {
+  if (annot.editIndex < 0) return;
+  annot.moving = true;
+  annotCard.classList.remove('open');             // tuck the card away; what you typed is kept
+  document.getElementById('annotMoveText').textContent = 'Drag number ' + (annot.editIndex + 1) + ' to the right spot on the model';
+  document.getElementById('annotMoveBanner').classList.add('show');
+}
+function annotEndMove() {
+  annot.moving = false;
+  document.getElementById('annotMoveBanner').classList.remove('show');
+  if (annot.editIndex >= 0) annotCard.classList.add('open');
 }
 
 // ----- turning the model so a chosen part faces you -----
@@ -4133,6 +4239,8 @@ function annotSelect(i, focus) {
   const it = annot.items[i];
   if (!it) return;
   closeAllPanels();
+  annotEndMove();
+  annot.editIndex = -1;
   annot.selected = i;
   annotMarkSelected();
   document.getElementById('annotCardNum').textContent = String(i + 1);
@@ -4145,7 +4253,9 @@ function annotSelect(i, focus) {
   if (focus) annotFaceCamera(i);
 }
 function annotCloseCard() {
+  annotEndMove();
   annotCard.classList.remove('open', 'editing');
+  annot.editIndex = -1;
   annot.selected = -1;
   annotMarkSelected();
 }
@@ -4154,7 +4264,10 @@ function annotEdit(i, isNew) {
   if (!it) return;
   closeAllPanels();
   annot.selected = i;
+  annot.editIndex = i;
   annot.editingNew = !!isNew;
+  // Remember where the point was, so Cancel can put it back if it was moved.
+  annot.editBackup = { x: it.x, y: it.y, z: it.z, nx: it.nx, ny: it.ny, nz: it.nz };
   annotMarkSelected();
   document.getElementById('annotEditNum').textContent = String(i + 1);
   document.getElementById('annotEditHeading').textContent = isNew ? 'Describe this part' : 'Edit this point';
@@ -4169,6 +4282,7 @@ function annotSaveEdit() {
   it.title = document.getElementById('annotTitleInput').value.trim();
   it.text = document.getElementById('annotTextInput').value.trim();
   annot.editingNew = false;
+  annot.editBackup = null;
   annotPersist();
   renderAnnotPanel();
   annotSelect(i, false);
@@ -4185,7 +4299,12 @@ function annotCancelEdit() {
     renderAnnotPanel();
     annotCloseCard();
   } else {
+    // Put the point back where it was if it had been dragged somewhere else.
+    const it = annot.items[i], b = annot.editBackup;
+    if (it && b) annotApplySpot(it, b);
+    annot.editBackup = null;
     annotSelect(i, false);
+    annotUpdate();
   }
 }
 function annotDelete(i) {
@@ -4215,28 +4334,38 @@ const _annRay = new THREE.Raycaster();
 _annRay.params.Points.threshold = 0.02;
 const _annNdc = new THREE.Vector2();
 const _annInv = new THREE.Matrix4();
-function annotPlaceAt(clientX, clientY) {
-  if (!currentModel) return;
+// Finds the spot on the model's surface under a screen position: where it is
+// (in the model's own coordinates) and which way the surface faces. Returns
+// null if the position is not on the model.
+function annotSurfaceAt(clientX, clientY) {
+  if (!currentModel) return null;
   const rect = renderer.domElement.getBoundingClientRect();
   _annNdc.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
   currentModel.updateMatrixWorld(true);
   camera.updateMatrixWorld();
   _annRay.setFromCamera(_annNdc, camera);
   const hits = _annRay.intersectObject(currentModel, true);
-  if (!hits.length) { showToast('Tap directly on the model.', 2000); return; }
+  if (!hits.length) return null;
   const hit = hits[0];
   const local = currentModel.worldToLocal(hit.point.clone());
-  const item = { x: local.x, y: local.y, z: local.z, title: '', text: '' };
+  const spot = { x: local.x, y: local.y, z: local.z };
   if (hit.face) {
     // Normal of the surface at that spot, flipped if needed so it faces you
     // (scans can have their faces wound either way), stored in model space.
     const nw = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
     if (nw.dot(_annRay.ray.direction) > 0) nw.negate();
     nw.transformDirection(_annInv.copy(currentModel.matrixWorld).invert());
-    item.nx = nw.x; item.ny = nw.y; item.nz = nw.z;
+    spot.nx = nw.x; spot.ny = nw.y; spot.nz = nw.z;
   }
   const r5 = (v) => Math.round(v * 100000) / 100000;
-  ['x', 'y', 'z', 'nx', 'ny', 'nz'].forEach((k) => { if (item[k] !== undefined) item[k] = r5(item[k]); });
+  ['x', 'y', 'z', 'nx', 'ny', 'nz'].forEach((k) => { if (spot[k] !== undefined) spot[k] = r5(spot[k]); });
+  return spot;
+}
+function annotPlaceAt(clientX, clientY) {
+  const spot = annotSurfaceAt(clientX, clientY);
+  if (!spot) { showToast('Tap directly on the model.', 2000); return; }
+  const item = { title: '', text: '' };
+  annotApplySpot(item, spot);
   annot.items.push(item);
   annotCancelAdd();
   annotRebuildMarkers();
@@ -4294,7 +4423,10 @@ function openAnnotPanel() {
 function annotOnModelChanged() {
   annot.items = annotLoadFor(currentFileName);
   annot.selected = -1;
+  annot.editIndex = -1;
   annot.editingNew = false;
+  annot.editBackup = null;
+  annotEndMove();
   annotCancelAdd();
   annotCard.classList.remove('open', 'editing');
   annotRebuildMarkers();
@@ -4317,6 +4449,8 @@ document.getElementById('annotEditBtn').addEventListener('click', () => annotEdi
 document.getElementById('annotDeleteBtn').addEventListener('click', () => annotDelete(annot.selected));
 document.getElementById('annotSaveBtn').addEventListener('click', annotSaveEdit);
 document.getElementById('annotCancelBtn').addEventListener('click', annotCancelEdit);
+document.getElementById('annotMoveBtn').addEventListener('click', annotStartMove);
+document.getElementById('annotMoveDone').addEventListener('click', annotEndMove);
 document.getElementById('annotPrevBtn').addEventListener('click', () => {
   if (!annot.items.length) return;
   annotSelect((annot.selected - 1 + annot.items.length) % annot.items.length, true);
