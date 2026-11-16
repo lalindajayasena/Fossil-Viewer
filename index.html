@@ -490,13 +490,13 @@
   /* A see-through ring with just the number inside. White with a thin dark
      edge and a dark halo on the digits, so it stays readable on any surface. */
   .annot-marker {
-    position: absolute; left: -14px; top: -14px;
-    width: 28px; height: 28px; padding: 0;
+    position: absolute; left: -11px; top: -11px;
+    width: 22px; height: 22px; padding: 0;
     border-radius: 50%;
-    border: 2px solid rgba(255,255,255,0.95);
+    border: 1.5px solid rgba(255,255,255,0.95);
     background: transparent;
     color: #fff;
-    font-size: 13px; font-weight: 700; line-height: 1;
+    font-size: 11px; font-weight: 700; line-height: 1;
     text-shadow: 0 0 3px rgba(0,0,0,0.95), 0 0 2px rgba(0,0,0,0.95), 0 0 6px rgba(0,0,0,0.6);
     box-shadow: 0 0 0 1px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(0,0,0,0.3);
     pointer-events: auto;
@@ -504,10 +504,12 @@
     will-change: transform;
     -webkit-tap-highlight-color: transparent;
   }
-  .annot-marker.selected { border-width: 3px; box-shadow: 0 0 0 1px rgba(0,0,0,0.5), 0 0 0 5px rgba(255,255,255,0.3), inset 0 0 0 1px rgba(0,0,0,0.3); }
+  /* The ring is small, so give the finger a bigger invisible target around it. */
+  .annot-marker::after { content: ''; position: absolute; top: -10px; left: -10px; right: -10px; bottom: -10px; border-radius: 50%; }
+  .annot-marker.selected { border-width: 2px; box-shadow: 0 0 0 1px rgba(0,0,0,0.5), 0 0 0 4px rgba(255,255,255,0.3), inset 0 0 0 1px rgba(0,0,0,0.3); }
   /* The point being edited can be dragged: dashed ring. */
   .annot-marker.editing { border-style: dashed; cursor: grab; }
-  .annot-marker.dragging { border-style: dashed; box-shadow: 0 0 0 1px rgba(0,0,0,0.5), 0 0 0 8px rgba(255,255,255,0.25); }
+  .annot-marker.dragging { border-style: dashed; box-shadow: 0 0 0 1px rgba(0,0,0,0.5), 0 0 0 7px rgba(255,255,255,0.25); }
   .annot-marker.back { opacity: 0.3; pointer-events: none; }   /* on the far side of the model */
   .annot-badge {
     width: 26px; height: 26px; flex-shrink: 0; border-radius: 50%;
@@ -518,13 +520,16 @@
     display: inline-flex; align-items: center; justify-content: center;
     box-sizing: border-box;
   }
+  /* Description card: dark glass that is 60% see-through, with light text, like Sketchfab's. */
   #annotCard {
     position: fixed; left: 14px; right: 14px; bottom: 14px;
     max-height: 42vh; overflow-y: auto;
     z-index: 30; display: none;
-    background: var(--panel-bg); border: 1px solid var(--panel-border);
-    border-radius: 14px; box-shadow: 0 4px 24px rgba(0,0,0,0.25);
+    background: rgba(20,18,15,0.4);
+    border: 1px solid rgba(255,255,255,0.28);
+    border-radius: 14px; box-shadow: 0 4px 24px rgba(0,0,0,0.2);
     padding: 14px; box-sizing: border-box;
+    color: #fff;
   }
   #annotCard.open { display: block; }
   /* While typing, the card moves to the top so the keyboard never covers it. */
@@ -533,23 +538,27 @@
   #annotCard.editing #annotCardEdit { display: block; }
   #annotCard.editing #annotCardView { display: none; }
   .annot-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
-  #annotCardTitle, #annotEditHeading { flex: 1; font-size: 15px; font-weight: 700; color: var(--text-primary); }
-  .annot-close { background: var(--close-btn-bg); border: none; width: 28px; height: 28px; border-radius: 50%; font-size: 13px; color: var(--icon-text); }
-  #annotCardText { font-size: 14px; line-height: 1.55; color: var(--text-primary); white-space: pre-wrap; }
-  #annotCardText.empty { color: var(--text-muted); font-style: italic; }
+  #annotCardTitle, #annotEditHeading { flex: 1; font-size: 15px; font-weight: 700; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.85), 0 0 2px rgba(0,0,0,0.7); }
+  #annotCard .annot-badge { border-color: #fff; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
+  #annotCard .ruler-help { color: rgba(255,255,255,0.82); text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
+  .annot-close { background: rgba(255,255,255,0.2); border: none; width: 28px; height: 28px; border-radius: 50%; font-size: 13px; color: #fff; }
+  #annotCardText { font-size: 14px; line-height: 1.55; color: #fff; white-space: pre-wrap; text-shadow: 0 1px 3px rgba(0,0,0,0.85), 0 0 2px rgba(0,0,0,0.7); }
+  #annotCardText.empty { color: rgba(255,255,255,0.72); font-style: italic; }
   .annot-card-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
   .annot-card-actions button {
-    background: var(--icon-bg); color: var(--icon-text);
-    border: 1px solid var(--icon-border); border-radius: 9px;
+    background: rgba(255,255,255,0.14); color: #fff;
+    border: 1px solid rgba(255,255,255,0.38); border-radius: 9px;
     padding: 8px 14px; font-size: 13px; font-weight: 600; font-family: inherit;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.7);
   }
-  #annotSaveBtn { background: var(--accent) !important; color: #1a1a1a !important; border-color: var(--accent) !important; }
+  #annotSaveBtn { background: rgba(255,255,255,0.92) !important; color: #1a1a1a !important; border-color: transparent !important; text-shadow: none !important; }
   #annotCardEdit input, #annotCardEdit textarea {
     width: 100%; box-sizing: border-box; padding: 10px; margin-top: 6px;
-    border-radius: 8px; border: 1px solid var(--icon-border);
-    background: var(--panel-bg); color: var(--text-primary);
+    border-radius: 8px; border: 1px solid rgba(255,255,255,0.32);
+    background: rgba(0,0,0,0.35); color: #fff;
     font-family: inherit; font-size: 14px;
   }
+  #annotCardEdit input::placeholder, #annotCardEdit textarea::placeholder { color: rgba(255,255,255,0.55); }
   #annotCardEdit textarea { min-height: 110px; resize: vertical; }
   #annotAddBanner, #annotMoveBanner {
     position: fixed; top: 14px; left: 50%; transform: translateX(-50%);
@@ -884,7 +893,7 @@
   <div id="centerUploadMsg"></div>
   <button type="button" id="welcomePicsBtn">🖼 Upload-screen pictures</button>
   <button type="button" id="updateAppBtn">⟳ Check for app update</button>
-  <div id="appVersionLabel">Version v53</div>
+  <div id="appVersionLabel">Version v54</div>
 </div>
 
 <div id="topbar">
@@ -960,6 +969,9 @@
     <span style="font-size:13px; color:var(--text-secondary);">Custom color:</span>
     <input type="color" id="customColorPicker" value="#b89968" style="width:44px; height:36px; border:none; border-radius:8px; cursor:pointer;">
   </div>
+  <label style="display:flex; align-items:flex-start; gap:8px; font-size:13px; color:var(--icon-text); margin-top:14px; line-height:1.4;">
+    <input type="checkbox" id="shadowToggle" style="margin-top:3px;"> Show shadows on the model (they can look dark while you rotate it)
+  </label>
 </div>
 
 <!-- Properties panel -->
@@ -1223,12 +1235,16 @@ import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 const container = document.getElementById('canvas-container');
-const APP_VERSION = 'v53';
+const APP_VERSION = 'v54';
 // True while background pictures are showing; the 3D scene then becomes see-through.
 let bgSlideshowActive = false;
 // Rendering bookkeeping, declared up here because early setup code touches it.
 let lastActivityAt = performance.now();   // last touch / tap / change, used for on-demand rendering
 let shadowDirty = true;                   // the shadow map needs recomputing
+// Shadows are OFF unless switched on in the 🎨 panel. With them on, the shadow
+// picture is only refreshed once the model stops moving, so while rotating, an
+// out-of-date shadow was painted onto the model as dark patches.
+const ldjShadowsStart = (() => { try { return localStorage.getItem('ldjShadows') === 'true'; } catch (e) { return false; } })();
 function markActive() { lastActivityAt = performance.now(); }
 const statusEl = document.getElementById('status');
 const loadingEl = document.getElementById('loading');
@@ -1300,7 +1316,7 @@ scene.add(camera);
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.shadowMap.enabled = true;
+renderer.shadowMap.enabled = ldjShadowsStart;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 // Shadows are recomputed only when the model actually moves (see
 // syncShadowWithModel), not every frame. Redrawing them 60 times a second
@@ -1362,7 +1378,7 @@ scene.add(new THREE.AmbientLight(0xffffff, 0.45));
 // Key light — strong, low-angle, casts shadows to reveal surface relief
 const keyLight = new THREE.DirectionalLight(0xfff2dd, 1.8);
 keyLight.position.set(6, 4, 8);
-keyLight.castShadow = true;
+keyLight.castShadow = ldjShadowsStart;
 keyLight.shadow.mapSize.set(1024, 1024);
 keyLight.shadow.camera.near = 0.1;
 keyLight.shadow.camera.far = 50;
@@ -4459,6 +4475,24 @@ document.getElementById('annotNextBtn').addEventListener('click', () => {
   if (!annot.items.length) return;
   annotSelect((annot.selected + 1) % annot.items.length, true);
 });
+
+// ---------- SHADOWS SWITCH ----------
+function setShadowsEnabled(on) {
+  renderer.shadowMap.enabled = on;
+  keyLight.castShadow = on;
+  // The model's materials were built with or without shadow code; rebuild them.
+  if (currentModel) {
+    currentModel.traverse((c) => {
+      if (c.material) (Array.isArray(c.material) ? c.material : [c.material]).forEach((m) => { m.needsUpdate = true; });
+    });
+  }
+  shadowDirty = true;
+  renderer.shadowMap.needsUpdate = true;
+  try { localStorage.setItem('ldjShadows', on ? 'true' : 'false'); } catch (e) { /* ignore */ }
+  markActive();
+}
+document.getElementById('shadowToggle').checked = ldjShadowsStart;
+document.getElementById('shadowToggle').addEventListener('change', (e) => setShadowsEnabled(e.target.checked));
 
 // ---------- SAFE APP UPDATE ----------
 // Clears the app's cached copy and the service worker, then reloads, so the
