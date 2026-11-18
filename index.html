@@ -893,7 +893,7 @@
   <div id="centerUploadMsg"></div>
   <button type="button" id="welcomePicsBtn">🖼 Upload-screen pictures</button>
   <button type="button" id="updateAppBtn">⟳ Check for app update</button>
-  <div id="appVersionLabel">Version v54</div>
+  <div id="appVersionLabel">Version v55</div>
 </div>
 
 <div id="topbar">
@@ -1235,7 +1235,7 @@ import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 const container = document.getElementById('canvas-container');
-const APP_VERSION = 'v54';
+const APP_VERSION = 'v55';
 // True while background pictures are showing; the 3D scene then becomes see-through.
 let bgSlideshowActive = false;
 // Rendering bookkeeping, declared up here because early setup code touches it.
@@ -1979,6 +1979,7 @@ function addMeshToScene(mesh) {
   if (typeof bgOnModelChanged === 'function') bgOnModelChanged();
   if (typeof rulerOnModelChanged === 'function') rulerOnModelChanged();
   if (typeof annotOnModelChanged === 'function') annotOnModelChanged();
+  if (typeof navOnModelLoaded === 'function') navOnModelLoaded();
   document.getElementById('topbar').classList.add('model-loaded');
   document.getElementById('floatingUploadWrap').classList.add('visible');
   updateProperties(mesh, currentFileName, currentFileSize);
@@ -2846,6 +2847,7 @@ function openSubtitles() {
     // shrink the upload button, and let the model use the space normally
     // reserved for the top/bottom toolbars.
     document.body.classList.add('subtitles-active');
+    navOnSubtitlesOpened();
     requestAnimationFrame(restoreSubCtrlPos);
   });
 }
@@ -2858,6 +2860,7 @@ function closeSubtitles() {
   if (typeof toggleFullView === 'function' && isFullView) {
     toggleFullView(true);
   }
+  navLeaveSubtitlesState();
 }
 
 document.getElementById('subtitleBtn').addEventListener('click', () => {
@@ -3019,6 +3022,7 @@ exitFullViewBtn.addEventListener('click', () => {
     pauseSubtitles();
     subtitleBar.classList.remove('active');
     document.body.classList.remove('subtitles-active');
+    navLeaveSubtitlesState();
   }
 });
 
@@ -4493,6 +4497,91 @@ function setShadowsEnabled(on) {
 }
 document.getElementById('shadowToggle').checked = ldjShadowsStart;
 document.getElementById('shadowToggle').addEventListener('change', (e) => setShadowsEnabled(e.target.checked));
+
+// ---------- BACK BUTTON: subtitles -> normal view -> home -> exit ----------
+// Every level you go into adds one step to the browser's history, so the
+// phone's Back button (or Back gesture) walks out the same way you came in:
+//     subtitles  ->  normal model view  ->  home (upload screen)  ->  leaves the app
+// Anything open on top (a panel, a description card ...) is closed first.
+let navIgnorePops = 0;
+try { history.replaceState({ ldj: 'home' }, ''); } catch (e) { /* ignore */ }
+function navState() { return history.state && history.state.ldj; }
+function navPush(name) { try { history.pushState({ ldj: name }, ''); } catch (e) { /* ignore */ } }
+function navOnModelLoaded() {
+  if (navState() !== 'model' && navState() !== 'subtitles') navPush('model');
+}
+function navOnSubtitlesOpened() {
+  if (navState() === 'model') navPush('subtitles');
+}
+// Subtitles were closed by a button (not by Back): remove their history step
+// quietly, so the next Back press doesn't mistake it for a real one.
+function navLeaveSubtitlesState() {
+  if (navState() !== 'subtitles') return;
+  navIgnorePops++;
+  setTimeout(() => { navIgnorePops = 0; }, 800);
+  try { history.back(); } catch (e) { navIgnorePops = 0; }
+}
+
+// Closes whatever is open on top of the model view. Returns true if it closed something.
+function closeTopOverlay() {
+  if (document.getElementById('descReaderOverlay').classList.contains('open')) {
+    document.getElementById('descReaderClose').click();
+    return true;
+  }
+  if (annotCard.classList.contains('open') || annot.moving) {
+    if (annotCard.classList.contains('editing') || annot.moving) annotCancelEdit(); else annotCloseCard();
+    return true;
+  }
+  if (annot.adding) { annotCancelAdd(); return true; }
+  if (Object.values(panels).some((p) => p.classList.contains('open'))) { closeAllPanels(); return true; }
+  if (isFullView) { toggleFullView(true); return true; }
+  return false;
+}
+
+// Back to the start screen: put everything back the way it is when the app opens.
+function goHome() {
+  closeAllPanels();
+  annotCloseCard();
+  annotCancelAdd();
+  if (ruler.visible) rulerHide();
+  if (isFullView) toggleFullView(true);
+  clearCurrentModel();
+  if (typeof clearMeasurement === 'function') clearMeasurement();
+  setRenderQuality(false);
+  currentFileName = '';
+  currentFileSize = 0;
+  lastMeasuredFileUnitDist = 0;
+  document.getElementById('toolRow').style.display = 'none';
+  document.getElementById('centerUpload').classList.remove('hidden');
+  document.getElementById('topbar').classList.remove('model-loaded');
+  document.getElementById('floatingUploadWrap').classList.remove('visible');
+  document.getElementById('printStatus').style.display = 'none';
+  document.getElementById('loading').style.display = 'none';
+  statusEl.textContent = 'No file loaded. Supports STL, OBJ, PLY, GLB.';
+  statusEl.style.color = '';
+  document.getElementById('centerUploadMsg').textContent = '';
+  refreshReadDescButton();
+  annotOnModelChanged();
+  bgOnModelChanged();
+  markActive();
+}
+
+function navOnPopState() {
+  if (navIgnorePops > 0) { navIgnorePops--; return; }
+  // Back was pressed: peel off the top-most layer.
+  if (subtitleBar.classList.contains('active')) { closeSubtitles(); return; }
+  if (closeTopOverlay()) { navPush('model'); return; }   // stay in the viewer
+  if (currentModel) goHome();
+  // Already at home: nothing is left to close, so the next Back leaves the app.
+}
+window.addEventListener('popstate', navOnPopState);
+
+// Leaving fullscreen with the Back gesture counts as the first step out of subtitles.
+function navOnFullscreenChange() {
+  if (!document.fullscreenElement && !document.webkitFullscreenElement && subtitleBar.classList.contains('active')) closeSubtitles();
+}
+document.addEventListener('fullscreenchange', navOnFullscreenChange);
+document.addEventListener('webkitfullscreenchange', navOnFullscreenChange);
 
 // ---------- SAFE APP UPDATE ----------
 // Clears the app's cached copy and the service worker, then reloads, so the
